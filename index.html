@@ -62,6 +62,10 @@
         .history-entry { border-bottom: 1px solid #eee; padding: 8px 0; font-size: 13px; }
         .history-entry:last-child { border-bottom: none; }
         .chart-wrap { position: relative; height: 220px; margin: 12px 0 4px; }
+        details.card { border: 1px solid #ddd; border-radius: 8px; background: white; }
+        details.card summary::-webkit-details-marker { display: none; }
+        details.card summary::after { content: '▼'; font-size: 11px; color: #aaa; }
+        details.card[open] summary::after { content: '▲'; }
     </style>
 </head>
 <body>
@@ -69,64 +73,68 @@
 <div class="container">
     <h2>📈 AI 주식 포트폴리오 진단기</h2>
 
+    <!-- 숨겨진 API 키 입력 (JS에서만 사용, 화면에 표시 안 함) -->
+    <input type="hidden" id="apiKeyInput">
+    <input type="hidden" id="priceApiKeyInput">
+
     <!-- 왼쪽 영역 -->
     <div class="left-panel">
-        <div class="card">
-            <h3 style="margin-top:0;">🔑 API 키 설정 (최초 1회만 입력)</h3>
-            <div class="form-group">
-                <label>API 키 입력 (OpenRouter)</label>
-                <input type="password" id="apiKeyInput" class="form-control" placeholder="sk-or-v1-...를 입력하세요" onchange="saveApiKeysToStorage()">
-            </div>
-            <div class="form-group">
-                <label>주가 조회용 API 키 (Twelve Data)</label>
-                <input type="password" id="priceApiKeyInput" class="form-control" placeholder="twelvedata.com에서 발급받은 키" onchange="saveApiKeysToStorage()">
-            </div>
-            <p style="font-size: 12px; color: #888; margin: 0;">한 번 입력하면 이 브라우저에 자동 저장되어 다음에 다시 입력하지 않아도 됩니다.</p>
-        </div>
 
-        <div class="card">
-            <h3 style="margin-top:0;">☁️ 여러 기기 동기화 (Google Sheets)</h3>
-            <div class="form-group">
-                <label>Apps Script 웹 앱 URL</label>
-                <input type="text" id="appsScriptUrlInput" class="form-control" placeholder="https://script.google.com/macros/s/.../exec" onchange="saveApiKeysToStorage(); initFromSheet();">
+        <!-- 설정 패널 (접고 펼치기) -->
+        <details id="settingsPanel" class="card" style="padding: 0;">
+            <summary style="padding: 16px 20px; font-weight: bold; font-size: 15px; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center;">
+                <span>⚙️ 설정</span>
+                <span id="syncStatusBadge" style="font-size: 12px; font-weight: normal; color: #888;"></span>
+            </summary>
+            <div style="padding: 0 20px 16px;">
+                <p style="font-size: 12px; color: #888; margin: 0 0 12px;">
+                    OpenRouter · Twelve Data API 키는 <strong>Google Sheets Settings 탭</strong>에서 직접 관리하세요.<br>
+                    아래 두 값만 입력하면 나머지는 자동으로 불러옵니다.
+                </p>
+                <div class="form-group">
+                    <label>Apps Script 웹 앱 URL</label>
+                    <input type="text" id="appsScriptUrlInput" class="form-control" placeholder="https://script.google.com/macros/s/.../exec" onchange="saveApiKeysToStorage(); initFromSheet();">
+                </div>
+                <div class="form-group">
+                    <label>Apps Script 비밀키</label>
+                    <input type="password" id="appsScriptSecretInput" class="form-control" placeholder="Code.gs에 설정한 SECRET_KEY" onchange="saveApiKeysToStorage(); initFromSheet();">
+                </div>
+                <button class="btn" style="margin-bottom: 14px;" onclick="initFromSheet()">🔄 구글시트에서 불러오기</button>
+                <div id="syncStatus" style="font-size: 12px; color: #888; margin-bottom: 12px;"></div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn" style="background:#dc3545; flex:1; font-size:13px; padding:8px;" onclick="clearAllHistory()" title="분석 기록만 삭제, 종목 유지">🗑️ 히스토리 초기화</button>
+                    <button class="btn" style="background:#6f42c1; flex:1; font-size:13px; padding:8px;" onclick="exportHistoryCSV()" title="분석 기록 CSV 다운로드">⬇️ CSV 내보내기</button>
+                </div>
             </div>
-            <div class="form-group">
-                <label>Apps Script 비밀키</label>
-                <input type="password" id="appsScriptSecretInput" class="form-control" placeholder="Code.gs에 설정한 SECRET_KEY" onchange="saveApiKeysToStorage(); initFromSheet();">
-            </div>
-            <button class="btn" style="margin-bottom: 10px;" onclick="initFromSheet()">🔄 구글시트에서 불러오기</button>
-            <div id="syncStatus" style="font-size: 12px; color: #888; margin: 0;">두 값을 입력하면 다른 기기와 데이터가 자동으로 동기화됩니다.</div>
-            <hr style="border:none; border-top:1px solid #eee; margin: 14px 0;">
-            <button class="btn" style="background:#dc3545;" onclick="clearAllHistory()">🗑️ 분석 히스토리 전체 초기화</button>
-            <p style="font-size: 12px; color: #888; margin: 6px 0 0;">종목·수량·단가는 유지되고 분석 기록만 삭제됩니다.</p>
-            <button class="btn" style="background:#6f42c1; margin-top: 8px;" onclick="exportHistoryCSV()">⬇️ 분석 기록 CSV 내보내기</button>
-            <p style="font-size: 12px; color: #888; margin: 6px 0 0;">모든 종목 분석 기록을 엑셀에서 열 수 있는 CSV 파일로 저장합니다.</p>
-        </div>
+        </details>
 
+        <!-- 종목 등록 -->
         <div class="card">
             <h3 style="margin-top:0;">🛠️ 종목 등록</h3>
             <p style="font-size: 12px; color: #888; margin-top: 0;">미국 주식은 티커(예: AAPL), 한국 주식은 6자리 종목코드(예: 삼성전자 005930)를 입력하세요.</p>
-            <div class="form-group">
-                <label>주식 티커 / 종목코드</label>
-                <input type="text" id="tickerInput" class="form-control" value="AAPL">
+            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                <div class="form-group" style="flex:2; margin:0;">
+                    <label>티커 / 종목코드</label>
+                    <input type="text" id="tickerInput" class="form-control" placeholder="AAPL / 005930">
+                </div>
+                <div class="form-group" style="flex:1; margin:0;">
+                    <label>수량 (주)</label>
+                    <input type="number" id="quantityInput" class="form-control" placeholder="10">
+                </div>
+                <div class="form-group" style="flex:1.5; margin:0;">
+                    <label>평균 매입가</label>
+                    <input type="number" id="buyPriceInput" class="form-control" placeholder="180">
+                </div>
             </div>
-            <div class="form-group">
-                <label>보유 수량 (주)</label>
-                <input type="number" id="quantityInput" class="form-control" value="10">
-            </div>
-            <div class="form-group">
-                <label>평균 매입가 (한국 주식은 ₩, 미국 주식은 $)</label>
-                <input type="number" id="buyPriceInput" class="form-control" value="180">
-            </div>
-            <button id="registerBtn" onclick="registerStock()" class="btn">종목 등록</button>
+            <button id="registerBtn" onclick="registerStock()" class="btn">+ 종목 등록</button>
         </div>
 
+        <!-- 종목 목록 -->
         <div class="card">
-            <h3 style="margin-top:0;">📋 등록된 종목 목록</h3>
-            <div id="portfolioSummary" style="display:none; margin-bottom: 12px; padding: 10px 12px; background: #f0f4ff; border-radius: 6px; border: 1px solid #c9d8f5; font-size: 13px; line-height: 1.7;">
-            </div>
+            <h3 style="margin-top:0;">📋 보유 종목</h3>
+            <div id="portfolioSummary" style="display:none; margin-bottom: 12px; padding: 10px 12px; background: #f0f4ff; border-radius: 6px; border: 1px solid #c9d8f5; font-size: 13px; line-height: 1.7;"></div>
             <div style="display:flex; gap:8px; margin-bottom:12px;">
-                <button class="btn btn-portfolio" style="flex:2;" onclick="analyzePortfolioOverall()">📊 전체 포트폴리오 종합 분석 (리밸런싱 조언)</button>
+                <button class="btn btn-portfolio" style="flex:2;" onclick="analyzePortfolioOverall()">📊 포트폴리오 종합 분석</button>
                 <button class="btn" style="flex:1; background:#6c757d;" onclick="showPortfolioHistory()">📈 종합 히스토리</button>
             </div>
             <div id="stockListContainer"></div>
@@ -268,11 +276,16 @@ async function initFromSheet() {
             persistApiKeysLocalCacheOnly(data.settings);
         }
 
-        statusEl.textContent = '동기화 완료';
+        statusEl.textContent = '✅ 동기화 완료';
+        document.getElementById('syncStatusBadge').textContent = '✅ 연결됨';
+        // 동기화 성공하면 설정 패널 자동으로 접기
+        const panel = document.getElementById('settingsPanel');
+        if (panel) panel.removeAttribute('open');
         setTimeout(() => { statusEl.textContent = ''; }, 2500);
     } catch (e) {
         console.warn('구글시트 연결 실패:', e);
-        statusEl.textContent = '오프라인 캐시 표시 중 (구글시트 연결 실패)';
+        statusEl.textContent = '⚠️ 구글시트 연결 실패 — 로컬 캐시 표시 중';
+        document.getElementById('syncStatusBadge').textContent = '⚠️ 오프라인';
     }
 }
 
@@ -1110,6 +1123,11 @@ loadApiKeysFromStorage();
 stocksArray = loadStocksFromStorage();
 portfolioHistory = loadPortfolioHistoryFromStorage();
 renderStockList();
+
+// 이미 연결 정보가 있으면 배지 표시
+if (getAppsScriptConfig()) {
+    document.getElementById('syncStatusBadge').textContent = '🔄 연결 중...';
+}
 initFromSheet();
 </script>
 </body>
