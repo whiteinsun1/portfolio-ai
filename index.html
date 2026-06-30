@@ -179,8 +179,8 @@ function setAnalyzingState(analyzing) {
 
 // ---------- API 키 저장/복원 ----------
 function saveApiKeysToStorage() {
-    localStorage.setItem('pf_openrouter_key', document.getElementById('apiKeyInput').value.trim());
-    localStorage.setItem('pf_twelvedata_key', document.getElementById('priceApiKeyInput').value.trim());
+    // openrouter_key / twelvedata_key는 Google Sheets에서 받아 persistApiKeysLocalCacheOnly로 저장되므로
+    // 여기서 덮어쓰지 않음 — hidden input 경유 시 빈 값으로 덮어씌워지는 버그 방지
     localStorage.setItem('pf_apps_script_url', document.getElementById('appsScriptUrlInput').value.trim());
     localStorage.setItem('pf_apps_script_secret', document.getElementById('appsScriptSecretInput').value.trim());
     syncSettingsToSheet();
