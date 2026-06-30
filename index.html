@@ -659,6 +659,97 @@ async function fetchUsPrice(ticker, priceApiKey) {
     return parseFloat(data.price);
 }
 
+// 미국 주식 기술지표 조회 (52주 고/저, 등락률, SMA20/50/200, RSI14)
+// AI가 "근거 있는" 손절선/매수타이밍을 제시하도록 보조 데이터를 제공한다.
+// 실패해도 null을 반환해 분석 자체는 그대로 진행되게 한다(지표는 어디까지나 보조).
+async function fetchUsIndicators(ticker, priceApiKey) {
+    try {
+        // 1) /quote 한 번으로 52주 고저·등락률을 받는다
+        const quoteUrl = `https://api.twelvedata.com/quote?symbol=${encodeURIComponent(ticker)}&apikey=${encodeURIComponent(priceApiKey)}`;
+        // 2) /time_series로 일봉 220개를 받아 SMA20/50/200, RSI14를 직접 계산한다 (지표 엔드포인트를 따로 안 써서 호출 수 절약)
+        const tsUrl = `https://api.twelvedata.com/time_series?symbol=${encodeURIComponent(ticker)}&interval=1day&outputsize=220&apikey=${encodeURIComponent(priceApiKey)}`;
+
+        const [quoteRes, tsRes] = await Promise.all([fetch(quoteUrl), fetch(tsUrl)]);
+        const quote = await quoteRes.json();
+        const ts = await tsRes.json();
+
+        const result = {};
+
+        if (quote && quote.status !== 'error') {
+            if (quote.fifty_two_week) {
+                result.high52 = parseFloat(quote.fifty_two_week.high);
+                result.low52 = parseFloat(quote.fifty_two_week.low);
+            }
+            if (quote.percent_change !== undefined) {
+                result.percentChange = parseFloat(quote.percent_change);
+            }
+        }
+
+        if (ts && ts.status !== 'error' && Array.isArray(ts.values) && ts.values.length > 0) {
+            // Twelve Data는 최신순(내림차순)으로 주므로 오래된 순으로 뒤집어 계산
+            const closes = ts.values.map(v => parseFloat(v.close)).reverse();
+            result.sma20 = simpleMovingAverage(closes, 20);
+            result.sma50 = simpleMovingAverage(closes, 50);
+            result.sma200 = simpleMovingAverage(closes, 200);
+            result.rsi14 = relativeStrengthIndex(closes, 14);
+        }
+
+        return Object.keys(result).length > 0 ? result : null;
+    } catch (err) {
+        return null; // 지표 조회 실패는 무시 (가격 분석은 계속 진행)
+    }
+}
+
+// 마지막 period개 종가의 단순이동평균
+function simpleMovingAverage(closes, period) {
+    if (closes.length < period) return null;
+    const slice = closes.slice(-period);
+    const sum = slice.reduce((a, b) => a + b, 0);
+    return sum / period;
+}
+
+// RSI(14) — 마지막 시점 기준 Wilder 평활 방식
+function relativeStrengthIndex(closes, period) {
+    if (closes.length < period + 1) return null;
+    let gains = 0, losses = 0;
+    for (let i = 1; i <= period; i++) {
+        const diff = closes[i] - closes[i - 1];
+        if (diff >= 0) gains += diff; else losses -= diff;
+    }
+    let avgGain = gains / period;
+    let avgLoss = losses / period;
+    for (let i = period + 1; i < closes.length; i++) {
+        const diff = closes[i] - closes[i - 1];
+        const gain = diff >= 0 ? diff : 0;
+        const loss = diff < 0 ? -diff : 0;
+        avgGain = (avgGain * (period - 1) + gain) / period;
+        avgLoss = (avgLoss * (period - 1) + loss) / period;
+    }
+    if (avgLoss === 0) return 100;
+    const rs = avgGain / avgLoss;
+    return 100 - 100 / (1 + rs);
+}
+
+// 지표 객체를 프롬프트에 넣을 사람이 읽기 좋은 텍스트로 변환 (null이면 빈 문자열)
+function formatIndicatorsForPrompt(ind, currencySymbol, currentPrice) {
+    if (!ind) return '';
+    const lines = [];
+    const pct = (base) => base ? ((currentPrice / base - 1) * 100).toFixed(1) : null;
+    if (ind.high52 && ind.low52) {
+        const posInRange = ((currentPrice - ind.low52) / (ind.high52 - ind.low52) * 100).toFixed(0);
+        lines.push(`- 52주 최고: ${currencySymbol}${formatNumber(ind.high52)} / 52주 최저: ${currencySymbol}${formatNumber(ind.low52)} (현재가는 52주 밴드의 약 ${posInRange}% 지점)`);
+    }
+    if (ind.sma20) lines.push(`- 20일선(단기): ${currencySymbol}${formatNumber(ind.sma20)} (현재가 대비 ${pct(ind.sma20) >= 0 ? '+' : ''}${pct(ind.sma20)}%)`);
+    if (ind.sma50) lines.push(`- 50일선(중기): ${currencySymbol}${formatNumber(ind.sma50)} (현재가 대비 ${pct(ind.sma50) >= 0 ? '+' : ''}${pct(ind.sma50)}%)`);
+    if (ind.sma200) lines.push(`- 200일선(장기 추세선): ${currencySymbol}${formatNumber(ind.sma200)} (현재가 대비 ${pct(ind.sma200) >= 0 ? '+' : ''}${pct(ind.sma200)}%)`);
+    if (ind.rsi14 !== undefined && ind.rsi14 !== null) {
+        const rsiNote = ind.rsi14 >= 70 ? '과열 구간' : ind.rsi14 <= 30 ? '과매도 구간' : '중립 구간';
+        lines.push(`- RSI(14): ${ind.rsi14.toFixed(0)} (${rsiNote})`);
+    }
+    if (lines.length === 0) return '';
+    return `\n## 기술적 위치 (객관적 보조 지표 — 손절선·매수타이밍 판단에 활용하세요)\n${lines.join('\n')}\n`;
+}
+
 // 종목 하나의 현재가를 한국/미국 여부에 따라 조회 (종목명도 비어있으면 채워줌)
 async function fetchPriceForStock(stock, priceApiKey) {
     if (isKoreanTicker(stock.ticker)) {
@@ -730,7 +821,7 @@ const INVESTOR_PROFILE = `
 - **손절 기준**: 아직 없음 → 이 종목 특성에 맞는 손절/익절 기준을 AI가 명확히 제안해줘야 함.
 - **성향**: 공격적이지만 코어 비중이 흔들리면 불안함. 단기 등락보다 장기 복리 우상향에 집중.`;
 
-function buildClaudeStylePrompt({ stock, currencySymbol, currentMarketPrice, profitLossPercent, marketLabel, weightPercent }) {
+function buildClaudeStylePrompt({ stock, currencySymbol, currentMarketPrice, profitLossPercent, marketLabel, weightPercent, indicatorsText }) {
     const isCore = stock.ticker.includes('QQQ') || stock.ticker.includes('SPY') || stock.ticker.includes('VOO') || stock.ticker.includes('IVV');
     const role = isCore ? '코어(지수 ETF)' : '새틀라이트(주도주)';
 
@@ -746,33 +837,39 @@ ${INVESTOR_PROFILE}
 - 현재 주가: ${currencySymbol}${formatNumber(currentMarketPrice)}
 - 현재 수익률: **${profitLossPercent}%**
 - 포트폴리오 내 비중: 약 ${weightPercent}%
-
+${indicatorsText}
 ## 요청 사항
-JSON 없이, 아래 4개 섹션을 순서대로 한국어로 작성하세요.
+JSON 없이, 아래 5개 섹션을 순서대로 한국어로 작성하세요.
+${indicatorsText ? '위에 제공된 기술적 위치(52주 밴드·이동평균선·RSI)를 손절선과 매수타이밍 판단의 근거로 반드시 활용하세요. 임의의 % 숫자가 아니라 실제 지지선(예: 200일선, 52주 저점) 기준으로 답하세요.' : '(이 종목의 기술지표는 조회되지 않았습니다. 일반적인 원칙으로 판단하되, 가정한 전제를 명시하세요.)'}
 
 ### 1. 포지션 진단
 - 이 종목이 코어/새틀라이트 역할을 제대로 하고 있는지 판단하세요.
 - 현재 수익률 ${profitLossPercent}%가 의미하는 바(강세/중립/약세 국면)를 짚고, BEP 대비 현재 위치를 명시하세요.
+- 기술적으로 현재가가 추세선(이동평균선) 위/아래 어디에 있는지, RSI 국면은 어떤지 짚으세요.
 - 새틀라이트 종목이라면: 지금이 "테마+실적" 모두 살아있는 진짜 주도주 국면인지 냉정하게 판단하세요.
 
 ### 2. 리스크 & 손절 기준 제안
 투자자가 아직 손절 기준이 없으므로, 이 종목 특성에 맞는 구체적 기준을 반드시 제시하세요.
-- **손절선**: ${currencySymbol}___ (이유 포함)
+- **손절선**: ${currencySymbol}___ (가능하면 200일선/52주 저점 등 실제 지지선 기준으로, 이유 포함)
 - **익절/분할매도 구간**: ${currencySymbol}___
 - 이 종목 보유 시 감내해야 할 현실적인 최대 낙폭(MDD) 가이드라인
 
-### 3. 액션 플랜 (가장 중요 — 하나만 선택)
+### 3. 기회비용 점검 (시드 증식의 핵심)
+- 이 종목에 묶인 돈을 그냥 코어(QQQM/나스닥100)에 넣었을 때와 비교해, 추가 리스크를 감수할 만한 기대 알파가 있는가?
+- "본전 찾으려고 버티는 중"이라면 그건 미련일 뿐임을 냉정하게 지적하고, 더 나은 자금 배치처가 있으면 제시하세요.
+
+### 4. 액션 플랜 (가장 중요 — 하나만 선택)
 현재 상황에서 가장 합리적인 행동을 아래 중 **하나만** 명확히 선택하고 근거를 제시하세요.
 - ✅ **추가매수** — 분할매수 단가와 월 100~150만원 기준 투입 비율 제시
 - ⏸ **홀드** — 재평가 트리거(가격 또는 이벤트) 명시
 - ⚠️ **분할매도** — 몇 % 규모로, 어느 가격에서
 - 🚫 **전량매도** — 사유와 자금 재배치 방향 제시
 
-### 4. 한 줄 요약
+### 5. 한 줄 요약
 이 종목이 지금 "10년 복리 목표"에 기여하는지, 발목 잡는지, 한 문장으로.`;
 }
 
-function buildGeminiStylePrompt({ stock, currencySymbol, currentMarketPrice, profitLossPercent, marketLabel, weightPercent }) {
+function buildGeminiStylePrompt({ stock, currencySymbol, currentMarketPrice, profitLossPercent, marketLabel, weightPercent, indicatorsText }) {
     const isCore = stock.ticker.includes('QQQ') || stock.ticker.includes('SPY') || stock.ticker.includes('VOO') || stock.ticker.includes('IVV');
     const role = isCore ? '코어(지수 ETF)' : '새틀라이트(주도주 후보)';
 
@@ -786,8 +883,9 @@ ${INVESTOR_PROFILE}
 - 시장: ${marketLabel} / 포트폴리오 비중: ${weightPercent}%
 - 평균 매입가: ${currencySymbol}${formatNumber(stock.buyPrice)} → 현재가: ${currencySymbol}${formatNumber(currentMarketPrice)}
 - 현재 수익률: **${profitLossPercent}%**
-
+${indicatorsText}
 ## 진단 리포트 (4개 섹션, 한국어, JSON 없이)
+${indicatorsText ? '위 기술적 위치 데이터를 손절선·매수타이밍 판단에 실제 지지선(이동평균선, 52주 저점) 기준으로 활용하세요.' : ''}
 
 ### 1. 📊 10년 복리 관점 펀더멘탈 진단
 이 종목이 10년 후에도 살아남아 성장할 구조적 이유가 있는지 분석하세요.
@@ -809,6 +907,7 @@ ${INVESTOR_PROFILE}
 ### 4. 🎯 포트폴리오 내 역할 재점검
 현재 ${weightPercent}% 비중이 코어-새틀라이트 전략(코어 50~70%)에 맞는지 평가하세요.
 - 비중을 늘려야 하는가, 줄여야 하는가, 유지해야 하는가?
+- **기회비용 점검**: 이 종목에 묶인 돈을 코어(QQQM)에 넣는 것 대비, 10년 복리 관점에서 더 나은 선택인지 한 문장으로 단언하세요. 본전 심리로 버티는 거라면 그 점을 지적하세요.
 - 이 종목과 함께 보유하면 시너지가 나는 보완 자산 1가지 추천 (이유 포함)
 
 **답변 스타일**: 숫자와 근거 중심. 모호한 표현("적절히 조절", "상황 봐서") 금지. 직접적이고 실행 가능한 조언만.`;
@@ -883,6 +982,10 @@ async function analyzeStock(stockId, promptType) {
     try {
         const currentMarketPrice = await fetchPriceForStock(stock, priceApiKey);
 
+        // 미국 주식이면 기술지표도 함께 조회 (실패하면 null → 분석은 그대로 진행)
+        const indicators = isKorean ? null : await fetchUsIndicators(stock.ticker, priceApiKey);
+        const indicatorsText = formatIndicatorsForPrompt(indicators, currencySymbol, currentMarketPrice);
+
         const totalBuyAmount = (stock.quantity * stock.buyPrice).toFixed(2);
         const totalCurrentAmount = (stock.quantity * currentMarketPrice).toFixed(2);
         const profitLoss = (totalCurrentAmount - totalBuyAmount).toFixed(2);
@@ -907,7 +1010,7 @@ async function analyzeStock(stockId, promptType) {
         const marketLabel = isKorean ? '국내' : '미국';
 
         const promptContext = {
-            stock, currencySymbol, currentMarketPrice, profitLossPercent, marketLabel, weightPercent
+            stock, currencySymbol, currentMarketPrice, profitLossPercent, marketLabel, weightPercent, indicatorsText
         };
         const promptMessage = promptType === 'gemini'
             ? buildGeminiStylePrompt(promptContext)
