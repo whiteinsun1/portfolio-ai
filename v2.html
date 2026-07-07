@@ -47,7 +47,8 @@
         .alloc-band { position: absolute; top: 0; bottom: 0; border-left: 2px dashed rgba(0,0,0,.45); }
         .alloc-label { display: flex; justify-content: space-between; font-size: 12px; color: #666; margin-top: 5px; }
         .alloc-list { margin-top: 12px; font-size: 13px; }
-        .alloc-list .row { display: flex; justify-content: space-between; padding: 5px 2px; border-bottom: 1px dashed #eee; }
+        .alloc-list .row { display: flex; justify-content: space-between; padding: 5px 2px 5px 10px; border-bottom: 1px dashed #eee; }
+        .group-head { font-weight: bold; font-size: 13px; color: #0d3875; background: #f0f6ff; border-radius: 5px; padding: 6px 10px; margin: 10px 0 4px; }
         .warn-chip { background: #fff0d5; color: #b45309; border-radius: 5px; padding: 6px 10px; font-size: 13px; margin-top: 10px; }
         .ok-chip { background: #d8f5e3; color: #157347; border-radius: 5px; padding: 6px 10px; font-size: 13px; margin-top: 10px; }
 
@@ -721,10 +722,13 @@ function renderAllocation() {
         ? warnings.map(w => `<div class="warn-chip">${w}</div>`).join('')
         : '<div class="ok-chip">✅ 배분 밴드 안에 있습니다 (코어 50~70%, 단일 새틀 15% 이하)</div>';
 
-    listEl.innerHTML = holdings
-        .sort((a, b) => b.valueKRW - a.valueKRW)
-        .map(h => `<div class="row"><span>${h.isCore ? '🏛️' : '🚀'} ${h.ticker}${h.name ? ` (${h.name})` : ''}<button class="role-toggle" onclick="toggleRole('${h.ticker}')" title="코어/새틀라이트 전환">${h.isCore ? '코어' : '새틀'} 전환</button></span><span><b>${(h.valueKRW / total * 100).toFixed(1)}%</b> · ${fmtKRW(h.valueKRW)}</span></div>`)
-        .join('');
+    // 코어 그룹을 위에, 새틀라이트 그룹을 아래에 — 각 그룹 안에서는 비중 큰 순으로 정렬
+    const rowHtml = h => `<div class="row"><span>${h.isCore ? '🏛️' : '🚀'} ${h.ticker}${h.name ? ` (${h.name})` : ''}<button class="role-toggle" onclick="toggleRole('${h.ticker}')" title="코어/새틀라이트 전환">${h.isCore ? '새틀로' : '코어로'}</button></span><span><b>${(h.valueKRW / total * 100).toFixed(1)}%</b> · ${fmtKRW(h.valueKRW)}</span></div>`;
+    const coreHoldings = holdings.filter(h => h.isCore).sort((a, b) => b.valueKRW - a.valueKRW);
+    const satHoldings = holdings.filter(h => !h.isCore).sort((a, b) => b.valueKRW - a.valueKRW);
+    listEl.innerHTML =
+        (coreHoldings.length ? `<div class="group-head">🏛️ 코어 — 합계 ${corePct.toFixed(1)}%</div>` + coreHoldings.map(rowHtml).join('') : '') +
+        (satHoldings.length ? `<div class="group-head">🚀 새틀라이트 — 합계 ${(100 - corePct).toFixed(1)}%</div>` + satHoldings.map(rowHtml).join('') : '');
 }
 
 // ================= 매매 일지 =================
