@@ -62,6 +62,10 @@
         .pick-stock { display: inline-block; margin: 3px 4px 0 0; padding: 5px 10px; border: 1px solid #0d6efd; background: #f0f6ff; color: #0d6efd; border-radius: 5px; cursor: pointer; font-size: 13px; }
         .pick-stock:hover { background: #0d6efd; color: white; }
         .role-toggle { background: none; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; padding: 1px 6px; cursor: pointer; color: #666; margin-left: 6px; }
+        .hist-entry { border: 1px solid #e5e5e5; border-radius: 7px; padding: 8px 12px; margin-bottom: 8px; font-size: 13px; }
+        .hist-entry summary { cursor: pointer; font-weight: bold; color: #333; }
+        .hist-entry .md-content { line-height: 1.7; }
+        .hist-entry .md-content h1, .hist-entry .md-content h2, .hist-entry .md-content h3 { font-size: 14px; margin: 10px 0 4px; }
 
         .result-box { min-height: 60px; background-color: #fafafa; border-radius: 6px; padding: 15px; border: 1px solid #eee; line-height: 1.7; font-size: 14px; }
         .result-box h1, .result-box h2, .result-box h3 { margin: 14px 0 6px; color: #1a1a2e; font-size: 15px; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }
@@ -200,6 +204,10 @@
         <p class="muted">궤도 분석: 목표 대비 진척·자산배분·다음 달 행동을 종합 진단 / 행동 복기: 매매 일지에서 나쁜 습관(물타기·FOMO·손절 미준수)을 찾아 교정</p>
         <div class="loading" id="aiLoading" style="display:none;">AI 분석 중... (무료 모델 혼잡 시 자동 재시도, 최대 1분)</div>
         <div class="result-box" id="aiResult" style="display:none;"></div>
+        <details class="settings" style="margin-top:14px;">
+            <summary>🗂️ 지난 분석 기록 (<span id="v2HistCount">0</span>건)</summary>
+            <div id="v2HistoryList" style="margin-top:10px;"></div>
+        </details>
     </div>
 
     <!-- 카드 6: 도움말 -->
@@ -250,8 +258,9 @@ const LS = {
     url: 'pf_apps_script_url', secret: 'pf_apps_script_secret',
     openrouter: 'pf_openrouter_key', twelvedata: 'pf_twelvedata_key',
     goal: 'pf_v2_goal', snapshots: 'pf_v2_snapshots', journal: 'pf_v2_journal', fx: 'pf_v2_usdkrw',
-    prices: 'pf_v2_prices'
+    prices: 'pf_v2_prices', v2history: 'pf_v2_ai_history'
 };
+const MAX_V2_HISTORY = 30;
 let stocksArray = [];
 let snapshots = [];   // [{month:"2026-07", stocksValue, otherAssets, totalAssets, contribution, note}]
 let journal = [];     // [{id, date, ticker, action, price, quantity, reason, stopLoss, targetPrice, emotion}]
@@ -261,6 +270,7 @@ let isBusy = false;
 let sheetLoaded = false;      // 시트 동기화 성공 여부 — 실패 상태에서 보유종목을 덮어쓰지 않기 위한 안전장치
 let pickedStockName = '';     // 한글 검색으로 고른 종목명 (신규 등록 시 이름으로 사용)
 let priceCache = {};          // {ticker: {price, ts}} — 마지막 실시간 조회 시세 (배분 카드 최신화용)
+let v2History = [];           // [{id, date, type, modelUsed, aiText}] — 궤도 분석·행동 복기 기록
 
 function loadJSON(key, def) { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : def; } catch (e) { return def; } }
 function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { alert('저장 공간이 부족합니다.'); } }
@@ -351,6 +361,7 @@ async function postToSheet(payload) {
 function syncSnapshotsToSheet() { postToSheet({ action: 'saveSnapshots', snapshots }); }
 function syncJournalToSheet() { postToSheet({ action: 'saveJournal', journal }); }
 function syncStocksToSheet() { postToSheet({ action: 'saveStocks', stocks: stocksArray }); }
+function syncV2HistoryToSheet() { postToSheet({ action: 'saveV2History', v2History }); }
 function syncGoalToSheet() {
     postToSheet({ action: 'saveSettings', settings: {
         goal_target: String(goal.target), goal_start_date: goal.startDate, goal_target_date: goal.targetDate,
@@ -390,6 +401,15 @@ async function initFromSheet() {
             data.journal.forEach(j => { byId[j.id] = j; });
             journal = Object.values(byId).sort((a, b) => a.date.localeCompare(b.date));
             saveJSON(LS.journal, journal);
+        }
+        if (Array.isArray(data.v2History)) {
+            const byHistId = {};
+            v2History.forEach(h => { byHistId[h.id] = h; });
+            data.v2History.forEach(h => { byHistId[h.id] = h; });
+            v2History = Object.values(byHistId).sort((a, b) => a.date.localeCompare(b.date));
+            if (v2History.length > MAX_V2_HISTORY) v2History = v2History.slice(-MAX_V2_HISTORY);
+            saveJSON(LS.v2history, v2History);
+            renderV2History();
         }
         if (data.settings) {
             if (data.settings.openrouter_key) localStorage.setItem(LS.openrouter, data.settings.openrouter_key);
@@ -1051,6 +1071,13 @@ async function runAI(prompt, btnId, title) {
         document.getElementById('aiResult').innerHTML =
             `<div class="muted" style="margin-bottom:8px;">${title} · 모델: ${modelUsed} · ${new Date().toLocaleString('ko-KR')}</div>` +
             renderMarkdown(content);
+
+        // 분석 기록으로 저장 (구글시트 동기화 → 나중에 리스트로 다시 볼 수 있음)
+        v2History.push({ id: String(Date.now()), date: new Date().toISOString(), type: title, modelUsed, aiText: content });
+        if (v2History.length > MAX_V2_HISTORY) v2History.shift();
+        saveJSON(LS.v2history, v2History);
+        syncV2HistoryToSheet();
+        renderV2History();
     } catch (e) {
         document.getElementById('aiResult').innerHTML = `<span class="error-text">오류: ${e.message}</span>`;
     } finally {
@@ -1061,14 +1088,42 @@ async function runAI(prompt, btnId, title) {
     }
 }
 
+// 지난 궤도 분석·행동 복기 기록 리스트
+function renderV2History() {
+    const listEl = document.getElementById('v2HistoryList');
+    const countEl = document.getElementById('v2HistCount');
+    if (!listEl) return;
+    countEl.textContent = v2History.length;
+    if (v2History.length === 0) {
+        listEl.innerHTML = '<p class="muted">아직 기록이 없어요. 분석을 실행하면 자동으로 여기에 쌓입니다.</p>';
+        return;
+    }
+    listEl.innerHTML = v2History.slice().reverse().map(h => `
+        <details class="hist-entry">
+            <summary>${new Date(h.date).toLocaleString('ko-KR')} — ${h.type} <span class="muted">(${h.modelUsed})</span>
+                <button class="del-link" onclick="event.preventDefault(); deleteV2History('${h.id}')">삭제</button></summary>
+            <div class="md-content" style="margin-top:8px;">${renderMarkdown(h.aiText)}</div>
+        </details>`).join('');
+}
+
+function deleteV2History(id) {
+    if (!confirm('이 분석 기록을 삭제할까요?')) return;
+    v2History = v2History.filter(h => h.id !== id);
+    saveJSON(LS.v2history, v2History);
+    syncV2HistoryToSheet();
+    renderV2History();
+}
+
 // ================= 초기화 =================
 goal = loadJSON(LS.goal, null) || getDefaultGoal();
 snapshots = loadJSON(LS.snapshots, []);
 journal = loadJSON(LS.journal, []);
 priceCache = loadJSON(LS.prices, {});
+v2History = loadJSON(LS.v2history, []);
 document.getElementById('jDate').value = new Date().toISOString().slice(0, 10);
 fillGoalForm();
 renderAll();
+renderV2History();
 initFromSheet();
 </script>
 </body>
