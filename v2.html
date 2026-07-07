@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>10년 경제적 자유 대시보드 V2</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+    <style>
+        body { background-color: #f4f6f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+        .top-bar { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 6px; }
+        h2 { color: #0d3875; margin: 0; font-size: 22px; }
+        .top-bar a { font-size: 13px; color: #0d6efd; text-decoration: none; }
+        .card { background: white; padding: 20px; border-radius: 10px; border: 1px solid #ddd; box-sizing: border-box; }
+        .card h3 { margin: 0 0 14px; font-size: 16px; color: #1a1a2e; border-bottom: 2px solid #eef2ff; padding-bottom: 8px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; margin-bottom: 4px; font-weight: bold; font-size: 13px; color: #444; }
+        .form-control { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 14px; }
+        .btn { width: 100%; padding: 11px; background-color: #0d6efd; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn:hover { background-color: #0b5ed7; }
+        .btn:disabled { background-color: #9bbcf0; cursor: not-allowed; }
+        .btn-green { background-color: #198754; } .btn-green:hover { background-color: #157347; }
+        .btn-gray { background-color: #6c757d; } .btn-gray:hover { background-color: #5c636a; }
+        .btn-sm { width: auto; padding: 6px 12px; font-size: 13px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+        @media (max-width: 560px) { .grid-3 { grid-template-columns: 1fr; } .grid-2 { grid-template-columns: 1fr; } }
+
+        /* 대시보드 숫자 */
+        .big-stats { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; }
+        .stat { flex: 1; min-width: 140px; background: #f8faff; border: 1px solid #e4ecff; border-radius: 8px; padding: 12px 14px; }
+        .stat .label { font-size: 12px; color: #777; margin-bottom: 4px; }
+        .stat .value { font-size: 21px; font-weight: 800; color: #0d3875; }
+        .stat .sub { font-size: 12px; color: #888; margin-top: 3px; }
+        .orbit-badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: bold; }
+        .orbit-ahead { background: #d8f5e3; color: #157347; }
+        .orbit-behind { background: #fff0d5; color: #b45309; }
+        .orbit-none { background: #eee; color: #777; }
+        .progress-track { background: #e9eef7; border-radius: 999px; height: 14px; overflow: hidden; margin: 8px 0 4px; }
+        .progress-fill { background: linear-gradient(90deg, #0d6efd, #198754); height: 100%; border-radius: 999px; transition: width .5s; }
+        .chart-wrap { position: relative; height: 260px; margin-top: 12px; }
+
+        /* 배분 게이지 */
+        .alloc-bar { position: relative; background: #ffe1e1; border-radius: 8px; height: 30px; overflow: hidden; }
+        .alloc-core { position: absolute; left: 0; top: 0; bottom: 0; background: #0d6efd; border-radius: 8px 0 0 8px; }
+        .alloc-band { position: absolute; top: 0; bottom: 0; border-left: 2px dashed rgba(0,0,0,.45); }
+        .alloc-label { display: flex; justify-content: space-between; font-size: 12px; color: #666; margin-top: 5px; }
+        .alloc-list { margin-top: 12px; font-size: 13px; }
+        .alloc-list .row { display: flex; justify-content: space-between; padding: 5px 2px; border-bottom: 1px dashed #eee; }
+        .warn-chip { background: #fff0d5; color: #b45309; border-radius: 5px; padding: 6px 10px; font-size: 13px; margin-top: 10px; }
+        .ok-chip { background: #d8f5e3; color: #157347; border-radius: 5px; padding: 6px 10px; font-size: 13px; margin-top: 10px; }
+
+        /* 일지 */
+        .journal-entry { border: 1px solid #e5e5e5; border-radius: 7px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; }
+        .journal-entry .head { display: flex; justify-content: space-between; align-items: center; }
+        .tag-buy { color: #dc3545; font-weight: bold; } .tag-sell { color: #0d6efd; font-weight: bold; }
+        .journal-entry .reason { color: #555; margin-top: 5px; line-height: 1.5; }
+        .journal-entry .meta { color: #999; font-size: 12px; margin-top: 4px; }
+        .del-link { color: #dc3545; font-size: 12px; cursor: pointer; background: none; border: none; padding: 0; }
+
+        .result-box { min-height: 60px; background-color: #fafafa; border-radius: 6px; padding: 15px; border: 1px solid #eee; line-height: 1.7; font-size: 14px; }
+        .result-box h1, .result-box h2, .result-box h3 { margin: 14px 0 6px; color: #1a1a2e; font-size: 15px; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }
+        .result-box strong { color: #0d3875; }
+        .result-box ul, .result-box ol { margin: 6px 0 6px 20px; padding: 0; }
+        .loading { font-weight: bold; color: #198754; text-align: center; margin: 14px 0; }
+        .error-text { color: #dc3545; font-weight: bold; }
+        .muted { color: #888; font-size: 13px; }
+        .sync-note { font-size: 12px; color: #888; text-align: right; }
+        details.settings summary { cursor: pointer; font-size: 13px; color: #0d6efd; font-weight: bold; }
+        .month-done { color: #157347; font-weight: bold; }
+        .month-todo { color: #b45309; font-weight: bold; }
+        .snap-breakdown { font-size: 12px; color: #666; background: #f8f9fa; border-radius: 5px; padding: 8px 10px; margin-top: 8px; display: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="top-bar">
+        <h2>🎯 10년 경제적 자유 대시보드 <span style="font-size:13px;color:#198754;">V2</span></h2>
+        <a href="./index.html">📊 V1 분석기로 이동 →</a>
+    </div>
+    <div class="sync-note" id="syncStatus"></div>
+
+    <!-- 카드 1: 목표 진행 현황 -->
+    <div class="card">
+        <h3>🧭 목표까지의 궤도</h3>
+        <div class="big-stats">
+            <div class="stat">
+                <div class="label">현재 총자산 (최근 스냅샷)</div>
+                <div class="value" id="statCurrent">-</div>
+                <div class="sub" id="statCurrentDate"></div>
+            </div>
+            <div class="stat">
+                <div class="label">목표</div>
+                <div class="value" id="statTarget">-</div>
+                <div class="sub" id="statDeadline"></div>
+            </div>
+            <div class="stat">
+                <div class="label">궤도 판정</div>
+                <div class="value" style="font-size:15px;"><span id="orbitBadge" class="orbit-badge orbit-none">스냅샷 없음</span></div>
+                <div class="sub" id="orbitDetail"></div>
+            </div>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        <div class="muted" id="progressText"></div>
+        <div class="chart-wrap"><canvas id="orbitChart"></canvas></div>
+        <div class="muted" id="projectionText" style="margin-top:10px;"></div>
+
+        <details class="settings" style="margin-top:14px;">
+            <summary>⚙️ 목표 설정 (금액·기간·수익률)</summary>
+            <div class="grid-3" style="margin-top:10px;">
+                <div class="form-group"><label>목표 금액 (원)</label><input type="number" id="goalTarget" class="form-control" placeholder="1000000000"></div>
+                <div class="form-group"><label>시작일</label><input type="date" id="goalStartDate" class="form-control"></div>
+                <div class="form-group"><label>목표일</label><input type="date" id="goalTargetDate" class="form-control"></div>
+                <div class="form-group"><label>시작 시드 (원)</label><input type="number" id="goalStartAmount" class="form-control" placeholder="예: 50000000"></div>
+                <div class="form-group"><label>예상 연수익률 (%)</label><input type="number" id="goalCagr" class="form-control" step="0.5" placeholder="10"></div>
+                <div class="form-group"><label>월 적립액 (원)</label><input type="number" id="goalMonthly" class="form-control" placeholder="1250000"></div>
+            </div>
+            <button class="btn btn-sm" onclick="saveGoal()">목표 저장</button>
+        </details>
+    </div>
+
+    <!-- 카드 2: 이번 달 체크 -->
+    <div class="card">
+        <h3>📅 이번 달 체크 <span id="monthLabel" class="muted"></span></h3>
+        <div id="monthStatus" style="margin-bottom:12px;"></div>
+        <div class="grid-2">
+            <div class="form-group">
+                <label>주식 자산 (원) <button class="btn btn-sm btn-gray" style="margin-left:6px;" onclick="autoCalcStocks()" id="autoCalcBtn">🔄 자동 계산</button></label>
+                <input type="number" id="snapStocks" class="form-control" placeholder="자동 계산 또는 직접 입력">
+                <div class="snap-breakdown" id="snapBreakdown"></div>
+            </div>
+            <div class="form-group"><label>기타 자산 — 현금·예금 등 (원)</label><input type="number" id="snapOther" class="form-control" placeholder="0"></div>
+            <div class="form-group"><label>이번 달 적립액 (원)</label><input type="number" id="snapContribution" class="form-control" placeholder="예: 1250000"></div>
+            <div class="form-group"><label>메모 (선택)</label><input type="text" id="snapNote" class="form-control" placeholder="예: 보너스 추가 투입"></div>
+        </div>
+        <div class="form-group"><label>적용 환율 (USD/KRW) <span class="muted" id="fxNote"></span></label><input type="number" id="fxRate" class="form-control" step="0.1"></div>
+        <button class="btn btn-green" onclick="saveSnapshot()">이번 달 스냅샷 저장</button>
+    </div>
+
+    <!-- 카드 3: 자산 배분 -->
+    <div class="card">
+        <h3>⚖️ 코어-새틀라이트 배분 <span class="muted">(목표: 코어 50~70%)</span></h3>
+        <div class="alloc-bar">
+            <div class="alloc-core" id="allocCore" style="width:0%"></div>
+            <div class="alloc-band" style="left:50%"></div>
+            <div class="alloc-band" style="left:70%"></div>
+        </div>
+        <div class="alloc-label"><span>코어 <b id="allocCorePct">-</b></span><span>새틀라이트 <b id="allocSatPct">-</b></span></div>
+        <div id="allocWarnings"></div>
+        <div class="alloc-list" id="allocList"></div>
+        <p class="muted" style="margin-bottom:0;">* 비중은 각 종목의 마지막 분석 시점 가격(없으면 매입가) 기준 추정입니다. 정확한 값은 스냅샷 자동 계산을 이용하세요.</p>
+    </div>
+
+    <!-- 카드 4: 매매 일지 -->
+    <div class="card">
+        <h3>📓 매매 일지 <span class="muted">(사기 전에 쓰면 최고, 산 뒤에라도 꼭)</span></h3>
+        <div class="grid-3">
+            <div class="form-group"><label>날짜</label><input type="date" id="jDate" class="form-control"></div>
+            <div class="form-group"><label>티커</label><input type="text" id="jTicker" class="form-control" placeholder="QQQM"></div>
+            <div class="form-group"><label>매수/매도</label>
+                <select id="jAction" class="form-control"><option value="매수">매수</option><option value="매도">매도</option></select></div>
+            <div class="form-group"><label>가격</label><input type="number" id="jPrice" class="form-control" step="0.01"></div>
+            <div class="form-group"><label>수량</label><input type="number" id="jQty" class="form-control" step="0.0001"></div>
+            <div class="form-group"><label>그때의 감정</label>
+                <select id="jEmotion" class="form-control">
+                    <option value="확신">😎 확신</option><option value="무덤덤">😐 무덤덤 (계획대로)</option>
+                    <option value="불안">😟 불안</option><option value="FOMO">🔥 FOMO (놓칠까봐)</option><option value="공포">😨 공포</option>
+                </select></div>
+        </div>
+        <div class="form-group"><label>이유 (한 줄이라도 — 나중에 AI가 복기해줌)</label><input type="text" id="jReason" class="form-control" placeholder="예: 실적 발표 서프라이즈, 200일선 지지 확인"></div>
+        <div class="grid-2">
+            <div class="form-group"><label>손절선 (선택)</label><input type="text" id="jStopLoss" class="form-control" placeholder="예: $150"></div>
+            <div class="form-group"><label>목표가 (선택)</label><input type="text" id="jTarget" class="form-control" placeholder="예: $220"></div>
+        </div>
+        <button class="btn" onclick="addJournalEntry()">일지 기록</button>
+        <div id="journalList" style="margin-top:14px;"></div>
+    </div>
+
+    <!-- 카드 5: AI 분석 V2 -->
+    <div class="card">
+        <h3>🤖 AI 분석 V2</h3>
+        <div class="grid-2">
+            <button class="btn btn-green" id="orbitBtn" onclick="runOrbitAnalysis()">🛰️ 10년 궤도 종합분석</button>
+            <button class="btn btn-gray" id="reviewBtn" onclick="runJournalReview()">🪞 내 매매 행동 복기</button>
+        </div>
+        <p class="muted">궤도 분석: 목표 대비 진척·자산배분·다음 달 행동을 종합 진단 / 행동 복기: 매매 일지에서 나쁜 습관(물타기·FOMO·손절 미준수)을 찾아 교정</p>
+        <div class="loading" id="aiLoading" style="display:none;">AI 분석 중... (무료 모델 혼잡 시 자동 재시도, 최대 1분)</div>
+        <div class="result-box" id="aiResult" style="display:none;"></div>
+    </div>
+</div>
+
+<script>
+// ================= 설정/상태 =================
+// V1(index.html)과 같은 도메인이므로 localStorage의 접속 정보를 그대로 공유한다
+const LS = {
+    url: 'pf_apps_script_url', secret: 'pf_apps_script_secret',
+    openrouter: 'pf_openrouter_key', twelvedata: 'pf_twelvedata_key',
+    goal: 'pf_v2_goal', snapshots: 'pf_v2_snapshots', journal: 'pf_v2_journal', fx: 'pf_v2_usdkrw'
+};
+let stocksArray = [];
+let snapshots = [];   // [{month:"2026-07", stocksValue, otherAssets, totalAssets, contribution, note}]
+let journal = [];     // [{id, date, ticker, action, price, quantity, reason, stopLoss, targetPrice, emotion}]
+let goal = null;      // {target, startDate, targetDate, startAmount, cagr, monthly}
+let orbitChart = null;
+let isBusy = false;
+
+function loadJSON(key, def) { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : def; } catch (e) { return def; } }
+function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { alert('저장 공간이 부족합니다.'); } }
+
+function getDefaultGoal() {
+    const today = new Date();
+    const end = new Date(today); end.setFullYear(end.getFullYear() + 10);
+    return {
+        target: 1000000000,               // 10억
+        startDate: today.toISOString().slice(0, 10),
+        targetDate: end.toISOString().slice(0, 10),
+        startAmount: 0,
+        cagr: 10,
+        monthly: 1250000
+    };
+}
+
+// ================= 포맷 헬퍼 =================
+function fmtKRW(v) {
+    if (v === null || v === undefined || isNaN(v)) return '-';
+    if (Math.abs(v) >= 1e8) return (v / 1e8).toFixed(2) + '억';
+    return Math.round(v / 1e4).toLocaleString() + '만원';
+}
+function fmtNum(v) { return Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+function currentMonthKey() { return new Date().toISOString().slice(0, 7); }
+
+// ================= 목표 수학 =================
+function monthlyRate(cagrPct) { return Math.pow(1 + cagrPct / 100, 1 / 12) - 1; }
+function monthsBetween(d1, d2) { return (d2 - d1) / (1000 * 60 * 60 * 24 * 30.4375); }
+// n개월 후 계획 자산: 시드 복리 + 월 적립 복리
+function planValueAt(g, n) {
+    const i = monthlyRate(g.cagr);
+    if (i === 0) return g.startAmount + g.monthly * n;
+    return g.startAmount * Math.pow(1 + i, n) + g.monthly * ((Math.pow(1 + i, n) - 1) / i);
+}
+// 목표 도달에 필요한 월 적립액 (현 수익률 가정)
+function requiredMonthly(g, nTotal) {
+    const i = monthlyRate(g.cagr);
+    const fromSeed = g.startAmount * Math.pow(1 + i, nTotal);
+    if (i === 0) return (g.target - fromSeed) / nTotal;
+    return (g.target - fromSeed) * i / (Math.pow(1 + i, nTotal) - 1);
+}
+// 목표 도달에 필요한 연수익률 (현 적립액 가정, 이분법)
+function requiredCagr(g, nTotal) {
+    let lo = -0.5, hi = 1.0; // 연 -50% ~ +100%
+    for (let k = 0; k < 60; k++) {
+        const mid = (lo + hi) / 2;
+        const test = { ...g, cagr: mid * 100 };
+        if (planValueAt(test, nTotal) >= g.target) hi = mid; else lo = mid;
+    }
+    return hi * 100;
+}
+
+// ================= Google Sheets 동기화 =================
+function getAppsScriptConfig() {
+    const url = localStorage.getItem(LS.url) || '';
+    const secret = localStorage.getItem(LS.secret) || '';
+    if (!url || !secret) return null;
+    return { url, secret };
+}
+
+async function postToSheet(payload) {
+    const config = getAppsScriptConfig();
+    if (!config) return;
+    try {
+        await fetch(config.url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ key: config.secret, ...payload })
+        });
+    } catch (e) { console.warn('시트 동기화 실패:', e); }
+}
+
+function syncSnapshotsToSheet() { postToSheet({ action: 'saveSnapshots', snapshots }); }
+function syncJournalToSheet() { postToSheet({ action: 'saveJournal', journal }); }
+function syncGoalToSheet() {
+    postToSheet({ action: 'saveSettings', settings: {
+        goal_target: String(goal.target), goal_start_date: goal.startDate, goal_target_date: goal.targetDate,
+        goal_start_amount: String(goal.startAmount), goal_cagr: String(goal.cagr), goal_monthly: String(goal.monthly),
+        app_url_v2: location.origin + location.pathname
+    }});
+}
+
+async function initFromSheet() {
+    const config = getAppsScriptConfig();
+    const statusEl = document.getElementById('syncStatus');
+    if (!config) {
+        statusEl.innerHTML = '⚠️ 구글시트 접속 정보가 없습니다. <a href="./index.html">V1 설정</a>에서 Apps Script URL·비밀키를 먼저 저장하세요.';
+        return;
+    }
+    statusEl.textContent = '🔄 구글시트 동기화 중...';
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const response = await fetch(`${config.url}?key=${encodeURIComponent(config.secret)}`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+
+        if (Array.isArray(data.stocks)) { stocksArray = data.stocks; }
+        if (Array.isArray(data.snapshots)) {
+            // 시트와 로컬을 month 기준 병합 (시트 우선)
+            const byMonth = {};
+            snapshots.forEach(s => { byMonth[s.month] = s; });
+            data.snapshots.forEach(s => { byMonth[s.month] = s; });
+            snapshots = Object.values(byMonth).sort((a, b) => a.month.localeCompare(b.month));
+            saveJSON(LS.snapshots, snapshots);
+        }
+        if (Array.isArray(data.journal)) {
+            const byId = {};
+            journal.forEach(j => { byId[j.id] = j; });
+            data.journal.forEach(j => { byId[j.id] = j; });
+            journal = Object.values(byId).sort((a, b) => a.date.localeCompare(b.date));
+            saveJSON(LS.journal, journal);
+        }
+        if (data.settings) {
+            if (data.settings.openrouter_key) localStorage.setItem(LS.openrouter, data.settings.openrouter_key);
+            if (data.settings.twelvedata_key) localStorage.setItem(LS.twelvedata, data.settings.twelvedata_key);
+            // 시트에 저장된 목표가 있으면 로컬보다 우선
+            if (data.settings.goal_target) {
+                goal = {
+                    target: Number(data.settings.goal_target),
+                    startDate: data.settings.goal_start_date || getDefaultGoal().startDate,
+                    targetDate: data.settings.goal_target_date || getDefaultGoal().targetDate,
+                    startAmount: Number(data.settings.goal_start_amount || 0),
+                    cagr: Number(data.settings.goal_cagr || 10),
+                    monthly: Number(data.settings.goal_monthly || 1250000)
+                };
+                saveJSON(LS.goal, goal);
+            }
+        }
+        statusEl.textContent = '✅ 동기화 완료';
+        setTimeout(() => { statusEl.textContent = ''; }, 2500);
+    } catch (e) {
+        console.warn(e);
+        statusEl.textContent = '⚠️ 시트 연결 실패 — 로컬 데이터로 표시 중';
+    }
+    renderAll();
+}
+
+// ================= 시세 조회 (V1과 동일 로직) =================
+function isKoreanTicker(ticker) { return /^[0-9A-Z]{6}$/.test(ticker) && /\d/.test(ticker); }
+
+async function fetchKoreanPrice(ticker) {
+    const targetUrl = `https://polling.finance.naver.com/api/realtime/domestic/stock/${encodeURIComponent(ticker)}`;
+    const response = await fetch(`https://r.jina.ai/${targetUrl}`);
+    if (!response.ok) throw new Error(`국내 시세 조회 실패 (${response.status})`);
+    const text = await response.text();
+    const jsonMatch = text.match(/\{.*\}/s);
+    if (!jsonMatch) throw new Error('국내 시세 응답 해석 불가');
+    const entry = JSON.parse(jsonMatch[0])?.datas?.[0];
+    if (!entry?.closePrice) throw new Error('종목 시세 없음');
+    return parseFloat(entry.closePrice.replace(/,/g, ''));
+}
+
+async function fetchUsPrice(ticker, apiKey) {
+    const res = await fetch(`https://api.twelvedata.com/price?symbol=${encodeURIComponent(ticker)}&apikey=${encodeURIComponent(apiKey)}`);
+    const data = await res.json();
+    if (!data.price || data.status === 'error') throw new Error(data.message || '미국 시세 없음');
+    return parseFloat(data.price);
+}
+
+async function fetchUsdKrw(apiKey) {
+    try {
+        const res = await fetch(`https://api.twelvedata.com/price?symbol=USD/KRW&apikey=${encodeURIComponent(apiKey)}`);
+        const data = await res.json();
+        if (data.price) {
+            const rate = parseFloat(data.price);
+            localStorage.setItem(LS.fx, String(rate));
+            return rate;
+        }
+    } catch (e) { /* 실패 시 캐시 사용 */ }
+    return parseFloat(localStorage.getItem(LS.fx) || '1400');
+}
+
+// ================= 스냅샷 =================
+async function autoCalcStocks() {
+    if (isBusy) return;
+    if (stocksArray.length === 0) { alert('등록된 종목이 없습니다. V1에서 종목을 먼저 등록하세요.'); return; }
+    const tdKey = localStorage.getItem(LS.twelvedata) || '';
+    const hasUs = stocksArray.some(s => !isKoreanTicker(s.ticker));
+    if (hasUs && !tdKey) { alert('Twelve Data 키가 없습니다. V1에서 구글시트 동기화를 먼저 실행하세요.'); return; }
+
+    isBusy = true;
+    const btn = document.getElementById('autoCalcBtn');
+    btn.disabled = true; btn.textContent = '조회 중...';
+    const breakdown = [];
+    try {
+        const fx = await fetchUsdKrw(tdKey);
+        document.getElementById('fxRate').value = fx.toFixed(1);
+        document.getElementById('fxNote').textContent = `(자동 조회됨)`;
+
+        let totalKRW = 0;
+        for (const stock of stocksArray) {
+            const isK = isKoreanTicker(stock.ticker);
+            try {
+                const price = isK ? await fetchKoreanPrice(stock.ticker) : await fetchUsPrice(stock.ticker, tdKey);
+                const valueKRW = isK ? price * stock.quantity : price * stock.quantity * fx;
+                totalKRW += valueKRW;
+                breakdown.push(`${stock.ticker}: ${isK ? '₩' : '$'}${fmtNum(price)} × ${stock.quantity} = ${fmtKRW(valueKRW)}`);
+            } catch (e) {
+                breakdown.push(`${stock.ticker}: ⚠️ 조회 실패 (합산 제외)`);
+            }
+        }
+        document.getElementById('snapStocks').value = Math.round(totalKRW);
+        const bd = document.getElementById('snapBreakdown');
+        bd.style.display = 'block';
+        bd.innerHTML = breakdown.join('<br>') + `<br><b>합계: ${fmtKRW(totalKRW)}</b> (환율 ${fmtNum(document.getElementById('fxRate').value)}원 적용)`;
+    } catch (e) {
+        alert('자동 계산 실패: ' + e.message);
+    } finally {
+        isBusy = false; btn.disabled = false; btn.textContent = '🔄 자동 계산';
+    }
+}
+
+function saveSnapshot() {
+    const stocksValue = parseFloat(document.getElementById('snapStocks').value) || 0;
+    const otherAssets = parseFloat(document.getElementById('snapOther').value) || 0;
+    const contribution = parseFloat(document.getElementById('snapContribution').value) || 0;
+    const note = document.getElementById('snapNote').value.trim();
+    if (stocksValue === 0 && otherAssets === 0) { alert('주식 자산 또는 기타 자산을 입력해주세요.'); return; }
+
+    const month = currentMonthKey();
+    const entry = { month, stocksValue, otherAssets, totalAssets: stocksValue + otherAssets, contribution, note };
+    const idx = snapshots.findIndex(s => s.month === month);
+    if (idx >= 0) {
+        if (!confirm(`${month} 스냅샷이 이미 있습니다. 덮어쓸까요?`)) return;
+        snapshots[idx] = entry;
+    } else {
+        snapshots.push(entry);
+    }
+    snapshots.sort((a, b) => a.month.localeCompare(b.month));
+    saveJSON(LS.snapshots, snapshots);
+    syncSnapshotsToSheet();
+    renderAll();
+    alert(`✅ ${month} 스냅샷 저장 완료! 총자산 ${fmtKRW(entry.totalAssets)}`);
+}
+
+// ================= 목표 =================
+function saveGoal() {
+    const g = {
+        target: parseFloat(document.getElementById('goalTarget').value) || 1000000000,
+        startDate: document.getElementById('goalStartDate').value || getDefaultGoal().startDate,
+        targetDate: document.getElementById('goalTargetDate').value || getDefaultGoal().targetDate,
+        startAmount: parseFloat(document.getElementById('goalStartAmount').value) || 0,
+        cagr: parseFloat(document.getElementById('goalCagr').value) || 10,
+        monthly: parseFloat(document.getElementById('goalMonthly').value) || 1250000
+    };
+    goal = g;
+    saveJSON(LS.goal, goal);
+    syncGoalToSheet();
+    renderAll();
+    alert('✅ 목표 저장 완료');
+}
+
+function fillGoalForm() {
+    document.getElementById('goalTarget').value = goal.target;
+    document.getElementById('goalStartDate').value = goal.startDate;
+    document.getElementById('goalTargetDate').value = goal.targetDate;
+    document.getElementById('goalStartAmount').value = goal.startAmount;
+    document.getElementById('goalCagr').value = goal.cagr;
+    document.getElementById('goalMonthly').value = goal.monthly;
+}
+
+// ================= 렌더링 =================
+function renderAll() {
+    renderDashboard();
+    renderChecklist();
+    renderAllocation();
+    renderJournal();
+}
+
+function renderDashboard() {
+    const start = new Date(goal.startDate);
+    const end = new Date(goal.targetDate);
+    const now = new Date();
+    const nTotal = Math.max(monthsBetween(start, end), 1);
+    const nNow = Math.min(Math.max(monthsBetween(start, now), 0), nTotal);
+
+    const last = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
+    const current = last ? last.totalAssets : goal.startAmount;
+
+    document.getElementById('statCurrent').textContent = fmtKRW(current);
+    document.getElementById('statCurrentDate').textContent = last ? `${last.month} 기록` : '스냅샷을 기록해보세요';
+    document.getElementById('statTarget').textContent = fmtKRW(goal.target);
+    const yearsLeft = Math.max((end - now) / (1000 * 60 * 60 * 24 * 365.25), 0);
+    document.getElementById('statDeadline').textContent = `${goal.targetDate}까지 (남은 기간 ${yearsLeft.toFixed(1)}년)`;
+
+    // 진행률 바
+    const progressPct = Math.min(current / goal.target * 100, 100);
+    document.getElementById('progressFill').style.width = progressPct.toFixed(1) + '%';
+    document.getElementById('progressText').textContent = `목표 진행률 ${progressPct.toFixed(1)}% · 시간 경과 ${(nNow / nTotal * 100).toFixed(1)}%`;
+
+    // 궤도 판정
+    const badge = document.getElementById('orbitBadge');
+    const detail = document.getElementById('orbitDetail');
+    if (last) {
+        const planNow = planValueAt(goal, nNow);
+        const diffPct = ((current - planNow) / planNow * 100);
+        if (current >= planNow) {
+            badge.className = 'orbit-badge orbit-ahead'; badge.textContent = '✅ 계획보다 앞섬';
+            detail.textContent = `계획 ${fmtKRW(planNow)} 대비 +${diffPct.toFixed(1)}%`;
+        } else {
+            badge.className = 'orbit-badge orbit-behind'; badge.textContent = '⚠️ 계획보다 뒤처짐';
+            detail.textContent = `계획 ${fmtKRW(planNow)} 대비 ${diffPct.toFixed(1)}%`;
+        }
+    } else {
+        badge.className = 'orbit-badge orbit-none'; badge.textContent = '스냅샷 없음';
+        detail.textContent = '이번 달 스냅샷부터 기록하세요';
+    }
+
+    // 프로젝션 텍스트 (역산 엔진)
+    const projected = planValueAt(goal, nTotal);
+    const reqM = requiredMonthly(goal, nTotal);
+    const reqC = requiredCagr(goal, nTotal);
+    document.getElementById('projectionText').innerHTML =
+        `📐 현재 설정(월 ${fmtKRW(goal.monthly)} 적립 · 연 ${goal.cagr}%)이면 ${goal.targetDate.slice(0, 4)}년에 <b>${fmtKRW(projected)}</b> 예상 ` +
+        (projected >= goal.target ? '→ <b style="color:#157347">목표 달성 가능 ✅</b>' : '→ <b style="color:#b45309">목표에 미달 ⚠️</b>') +
+        `<br>🎯 ${fmtKRW(goal.target)} 도달 조건: 월 적립 <b>${fmtKRW(Math.max(reqM, 0))}</b> (연 ${goal.cagr}% 유지 시) 또는 연수익률 <b>${reqC.toFixed(1)}%</b> (월 ${fmtKRW(goal.monthly)} 유지 시)`;
+
+    renderOrbitChart(start, end, nTotal);
+}
+
+function renderOrbitChart(start, end, nTotal) {
+    const canvas = document.getElementById('orbitChart');
+    if (orbitChart) { orbitChart.destroy(); orbitChart = null; }
+
+    // 계획 곡선: 시작~목표일을 월 단위로
+    const planData = [];
+    const stepMonths = nTotal > 60 ? 3 : 1; // 10년이면 분기 단위로 점 줄이기
+    for (let n = 0; n <= nTotal; n += stepMonths) {
+        const d = new Date(start); d.setMonth(d.getMonth() + n);
+        planData.push({ x: d.toISOString().slice(0, 7), y: planValueAt(goal, n) / 1e8 });
+    }
+    const actualData = snapshots.map(s => ({ x: s.month, y: s.totalAssets / 1e8 }));
+
+    // 라벨: 계획+실제의 모든 x를 정렬해 사용
+    const labels = [...new Set([...planData.map(p => p.x), ...actualData.map(p => p.x)])].sort();
+
+    orbitChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: '계획 곡선', data: labels.map(l => { const p = planData.find(d => d.x === l); return p ? p.y : null; }),
+                    borderColor: '#adb5bd', borderDash: [6, 4], pointRadius: 0, spanGaps: true, tension: 0.15
+                },
+                {
+                    label: '실제 자산', data: labels.map(l => { const a = actualData.find(d => d.x === l); return a ? a.y : null; }),
+                    borderColor: '#0d6efd', backgroundColor: '#0d6efd', pointRadius: 4, spanGaps: true, tension: 0.15
+                }
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            plugins: {
+                legend: { labels: { boxWidth: 20, font: { size: 12 } } },
+                tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y === null ? '-' : c.parsed.y.toFixed(2) + '억'}` } }
+            },
+            scales: {
+                y: { title: { display: true, text: '자산 (억원)' }, beginAtZero: true },
+                x: { ticks: { maxTicksLimit: 12, font: { size: 11 } } }
+            }
+        }
+    });
+}
+
+function renderChecklist() {
+    const month = currentMonthKey();
+    document.getElementById('monthLabel').textContent = `— ${month}`;
+    const snap = snapshots.find(s => s.month === month);
+    const el = document.getElementById('monthStatus');
+    if (snap) {
+        el.innerHTML = `<span class="month-done">✅ 이번 달 스냅샷 기록 완료</span> — 총자산 ${fmtKRW(snap.totalAssets)}` +
+            (snap.contribution > 0 ? ` · 적립 ${fmtKRW(snap.contribution)} 완료 💪` : ' · <span class="month-todo">적립액이 기록되지 않았어요</span>');
+        document.getElementById('snapStocks').value = snap.stocksValue;
+        document.getElementById('snapOther').value = snap.otherAssets;
+        document.getElementById('snapContribution').value = snap.contribution;
+        document.getElementById('snapNote').value = snap.note || '';
+    } else {
+        el.innerHTML = `<span class="month-todo">📌 이번 달 스냅샷이 아직 없어요.</span> 자동 계산 → 기타 자산 입력 → 저장 (1분 소요)`;
+    }
+    if (!document.getElementById('fxRate').value) {
+        document.getElementById('fxRate').value = parseFloat(localStorage.getItem(LS.fx) || '1400');
+    }
+}
+
+function isCoreTicker(ticker) {
+    return ticker.includes('QQQ') || ticker.includes('SPY') || ticker.includes('VOO') || ticker.includes('IVV');
+}
+
+// 종목별 추정 평가액(원화): 마지막 분석 가격(없으면 매입가) × 수량, 미국 주식은 환율 적용
+function estimateHoldingsKRW() {
+    const fx = parseFloat(localStorage.getItem(LS.fx) || '1400');
+    return stocksArray.map(s => {
+        const lastEntry = (s.history && s.history.length > 0) ? s.history[s.history.length - 1] : null;
+        const price = lastEntry ? lastEntry.currentPrice : s.buyPrice;
+        const isK = isKoreanTicker(s.ticker);
+        const valueKRW = isK ? price * s.quantity : price * s.quantity * fx;
+        return { ticker: s.ticker, name: s.name || '', isCore: isCoreTicker(s.ticker), valueKRW };
+    });
+}
+
+function renderAllocation() {
+    const holdings = estimateHoldingsKRW();
+    const total = holdings.reduce((sum, h) => sum + h.valueKRW, 0);
+    const listEl = document.getElementById('allocList');
+    const warnEl = document.getElementById('allocWarnings');
+    if (total === 0) {
+        document.getElementById('allocCorePct').textContent = '-';
+        document.getElementById('allocSatPct').textContent = '-';
+        listEl.innerHTML = '<p class="muted">V1에서 종목을 등록하면 배분이 표시됩니다.</p>';
+        warnEl.innerHTML = '';
+        return;
+    }
+    const coreValue = holdings.filter(h => h.isCore).reduce((s, h) => s + h.valueKRW, 0);
+    const corePct = coreValue / total * 100;
+    document.getElementById('allocCore').style.width = corePct.toFixed(1) + '%';
+    document.getElementById('allocCorePct').textContent = corePct.toFixed(1) + '%';
+    document.getElementById('allocSatPct').textContent = (100 - corePct).toFixed(1) + '%';
+
+    const warnings = [];
+    if (corePct < 50) warnings.push(`⚠️ 코어 비중 ${corePct.toFixed(1)}% — 50% 미만입니다. 이번 달 적립은 코어(QQQM 등)부터 채우세요.`);
+    else if (corePct > 70) warnings.push(`ℹ️ 코어 비중 ${corePct.toFixed(1)}% — 밴드 상단(70%)을 넘었어요. 다음 적립은 검증된 새틀라이트를 검토해도 됩니다.`);
+    holdings.filter(h => !h.isCore && h.valueKRW / total > 0.15).forEach(h => {
+        warnings.push(`⚠️ ${h.ticker} 비중 ${(h.valueKRW / total * 100).toFixed(1)}% — 새틀라이트 단일 한도(15%) 초과. 수익 실현로 비중 조절을 검토하세요.`);
+    });
+    warnEl.innerHTML = warnings.length > 0
+        ? warnings.map(w => `<div class="warn-chip">${w}</div>`).join('')
+        : '<div class="ok-chip">✅ 배분 밴드 안에 있습니다 (코어 50~70%, 단일 새틀 15% 이하)</div>';
+
+    listEl.innerHTML = holdings
+        .sort((a, b) => b.valueKRW - a.valueKRW)
+        .map(h => `<div class="row"><span>${h.isCore ? '🏛️' : '🚀'} ${h.ticker}${h.name ? ` (${h.name})` : ''}</span><span><b>${(h.valueKRW / total * 100).toFixed(1)}%</b> · ${fmtKRW(h.valueKRW)}</span></div>`)
+        .join('');
+}
+
+// ================= 매매 일지 =================
+function addJournalEntry() {
+    const ticker = document.getElementById('jTicker').value.trim().toUpperCase();
+    const price = parseFloat(document.getElementById('jPrice').value);
+    const quantity = parseFloat(document.getElementById('jQty').value);
+    const reason = document.getElementById('jReason').value.trim();
+    if (!ticker || !price || !quantity) { alert('티커·가격·수량을 입력해주세요.'); return; }
+    if (!reason) { alert('이유를 한 줄이라도 적어주세요 — 이게 이 일지의 핵심입니다!'); return; }
+
+    journal.push({
+        id: String(Date.now()),
+        date: document.getElementById('jDate').value || new Date().toISOString().slice(0, 10),
+        ticker,
+        action: document.getElementById('jAction').value,
+        price, quantity, reason,
+        stopLoss: document.getElementById('jStopLoss').value.trim(),
+        targetPrice: document.getElementById('jTarget').value.trim(),
+        emotion: document.getElementById('jEmotion').value
+    });
+    journal.sort((a, b) => a.date.localeCompare(b.date));
+    saveJSON(LS.journal, journal);
+    syncJournalToSheet();
+    ['jTicker', 'jPrice', 'jQty', 'jReason', 'jStopLoss', 'jTarget'].forEach(id => document.getElementById(id).value = '');
+    renderJournal();
+}
+
+function deleteJournalEntry(id) {
+    if (!confirm('이 일지 기록을 삭제할까요?')) return;
+    journal = journal.filter(j => j.id !== id);
+    saveJSON(LS.journal, journal);
+    syncJournalToSheet();
+    renderJournal();
+}
+
+function renderJournal() {
+    const el = document.getElementById('journalList');
+    if (journal.length === 0) {
+        el.innerHTML = '<p class="muted">아직 기록이 없어요. 다음 매매부터 "왜 사는지" 한 줄만 적어보세요 — 1년 뒤 최고의 스승이 됩니다.</p>';
+        return;
+    }
+    const emoji = { '확신': '😎', '무덤덤': '😐', '불안': '😟', 'FOMO': '🔥', '공포': '😨' };
+    el.innerHTML = journal.slice().reverse().map(j => `
+        <div class="journal-entry">
+            <div class="head">
+                <span><b>${j.ticker}</b> <span class="${j.action === '매수' ? 'tag-buy' : 'tag-sell'}">${j.action}</span> ${fmtNum(j.price)} × ${fmtNum(j.quantity)}</span>
+                <span>${emoji[j.emotion] || ''} ${j.date} <button class="del-link" onclick="deleteJournalEntry('${j.id}')">삭제</button></span>
+            </div>
+            <div class="reason">💬 ${j.reason}</div>
+            ${(j.stopLoss || j.targetPrice) ? `<div class="meta">손절 ${j.stopLoss || '-'} / 목표 ${j.targetPrice || '-'}</div>` : ''}
+        </div>`).join('');
+}
+
+// ================= AI 분석 V2 =================
+const FREE_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "openai/gpt-oss-120b:free",
+    "qwen/qwen3-next-80b-a3b-instruct:free",
+    "nvidia/nemotron-3-super-120b-a12b:free"
+];
+
+async function callOpenRouterWithFallback(apiKey, promptMessage) {
+    let lastError;
+    for (const model of FREE_MODELS) {
+        try {
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ model, messages: [{ role: "user", content: promptMessage }] })
+            });
+            const data = await response.json();
+            if (!response.ok) { lastError = new Error(`(${model}) ${data?.error?.message || response.status}`); continue; }
+            if (data.choices && data.choices[0]) return { content: data.choices[0].message.content, modelUsed: model };
+            lastError = new Error(`(${model}) 알 수 없는 응답`);
+        } catch (err) { lastError = err; }
+    }
+    throw new Error(`모든 무료 모델이 응답하지 않았습니다: ${lastError.message}`);
+}
+
+function renderMarkdown(text) {
+    if (typeof marked !== 'undefined') return marked.parse(text);
+    return text.replace(/\n/g, '<br>');
+}
+
+const INVESTOR_PROFILE_V2 = `
+## 투자자 프로필
+- 목표: 경제적 자유. 10년 장기 복리로 시드머니를 우상향시키는 평범한 직장인.
+- 전략: 코어-새틀라이트 (나스닥100 ETF 코어 50~70% + 검증된 주도주 새틀라이트).
+- 월 투자 여력: 약 100~150만원.
+
+## 운용 원칙 (제안이 이 원칙에 어긋나면 안 됨)
+1. 복리의 수학: -50%는 +100%로만 복구된다. 큰 손실 회피가 우선.
+2. 물타기 금지, 불타기 원칙: 하락 추세 종목 평단 낮추기 금지. 이기는 종목에 피라미딩.
+3. 기회비용: 새틀라이트는 QQQM 초과수익 기대가 있을 때만 보유 가치.
+4. 집중 한도: 새틀라이트 단일 종목 15% 이하.
+5. 월 투입 우선순위: 코어 유지 → 검증된 새틀라이트 → 현금 대기도 유효.`;
+
+function buildGoalContext() {
+    const start = new Date(goal.startDate);
+    const end = new Date(goal.targetDate);
+    const now = new Date();
+    const nTotal = Math.max(monthsBetween(start, end), 1);
+    const nNow = Math.min(Math.max(monthsBetween(start, now), 0), nTotal);
+    const last = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
+    const current = last ? last.totalAssets : goal.startAmount;
+    const planNow = planValueAt(goal, nNow);
+    const recentSnaps = snapshots.slice(-6).map(s =>
+        `${s.month}: 총자산 ${fmtKRW(s.totalAssets)} (적립 ${fmtKRW(s.contribution)})`).join('\n') || '(스냅샷 없음)';
+
+    return `## 10년 목표 진행 상황
+- 목표: ${fmtKRW(goal.target)} / 목표일: ${goal.targetDate}
+- 경과: ${(nNow / nTotal * 100).toFixed(1)}% (${nNow.toFixed(0)}개월 / 총 ${nTotal.toFixed(0)}개월)
+- 현재 총자산: ${fmtKRW(current)} / 이 시점 계획값: ${fmtKRW(planNow)} (${current >= planNow ? '앞섬 +' : '뒤처짐 '}${((current - planNow) / planNow * 100).toFixed(1)}%)
+- 설정: 월 적립 ${fmtKRW(goal.monthly)} · 예상 연수익률 ${goal.cagr}%
+
+## 최근 자산 스냅샷 (월별)
+${recentSnaps}`;
+}
+
+function buildHoldingsContext() {
+    const holdings = estimateHoldingsKRW();
+    const total = holdings.reduce((s, h) => s + h.valueKRW, 0);
+    if (total === 0) return '## 보유 종목\n(등록 종목 없음)';
+    const coreValue = holdings.filter(h => h.isCore).reduce((s, h) => s + h.valueKRW, 0);
+    const lines = holdings.sort((a, b) => b.valueKRW - a.valueKRW)
+        .map(h => `- ${h.ticker}${h.name ? `(${h.name})` : ''} [${h.isCore ? '코어' : '새틀'}]: ${fmtKRW(h.valueKRW)} (${(h.valueKRW / total * 100).toFixed(1)}%)`);
+    return `## 보유 종목 (추정 평가액 기준)
+코어 비중: ${(coreValue / total * 100).toFixed(1)}% / 새틀라이트: ${(100 - coreValue / total * 100).toFixed(1)}%
+${lines.join('\n')}`;
+}
+
+async function runOrbitAnalysis() {
+    if (isBusy) return;
+    const apiKey = localStorage.getItem(LS.openrouter) || '';
+    if (!apiKey) { alert('OpenRouter 키가 없습니다. V1에서 구글시트 동기화를 먼저 실행하세요.'); return; }
+
+    const prompt = `당신은 10년 자산 목표를 관리하는 전담 재무 코치입니다. 아래 데이터로 궤도 진단을 하세요.
+${INVESTOR_PROFILE_V2}
+
+${buildGoalContext()}
+
+${buildHoldingsContext()}
+
+## 요청 (한국어, JSON 없이, 4개 섹션)
+### 1. 🛰️ 궤도 진단
+계획 대비 현재 위치를 판정하고, 차이의 원인을 분해하세요: (a) 적립을 계획만큼 했는가 (b) 수익률이 계획을 따라오는가. 스냅샷 추이로 판단하세요.
+### 2. 📐 향후 12개월 우선순위
+지금 궤도에서 목표 달성 확률을 높이는 순서를 정하세요. 적립 증액 / 배분 교정 / 종목 교체 중 무엇이 가장 효과가 큰지 숫자로 비교하세요.
+### 3. ⚖️ 배분 처방
+코어 50~70% 밴드 기준으로 현재 배분을 평가하고, 이번 달 적립 100~150만원의 구체적 배분(종목·금액)을 제시하세요. 물타기 금지 원칙을 지키세요.
+### 4. ✅ 이번 달 행동 3줄
+당장 실행할 것 3줄. 종목명·금액 포함, 모호한 표현 금지.`;
+
+    await runAI(prompt, 'orbitBtn', '🛰️ 10년 궤도 종합분석');
+}
+
+async function runJournalReview() {
+    if (isBusy) return;
+    const apiKey = localStorage.getItem(LS.openrouter) || '';
+    if (!apiKey) { alert('OpenRouter 키가 없습니다. V1에서 구글시트 동기화를 먼저 실행하세요.'); return; }
+    if (journal.length < 3) { alert('일지가 3건 이상 쌓이면 의미 있는 복기가 가능해요. 지금은 ' + journal.length + '건입니다.'); return; }
+
+    const entries = journal.map(j =>
+        `- ${j.date} ${j.ticker} ${j.action} @${j.price} ×${j.quantity} | 감정:${j.emotion} | 이유:"${j.reason}" | 손절:${j.stopLoss || '미설정'} 목표:${j.targetPrice || '미설정'}`).join('\n');
+
+    const prompt = `당신은 투자 행동심리 코치입니다. 아래는 한 직장인 투자자의 매매 일지 전체입니다.
+개인투자자는 '행동 갭' 때문에 보유 자산 수익률보다 연 1~2%p 덜 법니다. 이 투자자의 일지에서 그 패턴을 찾아 교정해주세요.
+${INVESTOR_PROFILE_V2}
+
+## 매매 일지 (시간순)
+${entries}
+
+${buildGoalContext()}
+
+## 요청 (한국어, JSON 없이, 4개 섹션)
+### 1. 🪞 행동 패턴 진단
+일지에서 반복되는 패턴을 찾으세요: 물타기 흔적(하락 종목 반복 매수), FOMO 매수(감정:FOMO + 고점 매수), 손절선 미설정 습관, 공포 매도 등. 구체적 기록을 인용하며 지적하세요.
+### 2. ⚠️ 가장 위험한 습관 1가지
+10년 복리를 가장 크게 갉아먹을 습관 하나를 지목하고, 그 습관이 10년간 반복되면 자산에 미칠 영향을 추정하세요.
+### 3. 💊 교정 처방 3가지
+구체적이고 실행 가능한 규칙 3가지 (예: "매수 전 일지 먼저 쓰고 24시간 뒤 실행", "손절선 없는 매수 금지").
+### 4. 👏 잘한 것
+규율을 지킨 기록이 있으면 칭찬하세요. 좋은 습관은 강화가 필요합니다.`;
+
+    await runAI(prompt, 'reviewBtn', '🪞 매매 행동 복기');
+}
+
+async function runAI(prompt, btnId, title) {
+    isBusy = true;
+    const btn = document.getElementById(btnId);
+    btn.disabled = true;
+    document.getElementById('aiLoading').style.display = 'block';
+    document.getElementById('aiResult').style.display = 'none';
+    try {
+        const apiKey = localStorage.getItem(LS.openrouter) || '';
+        const { content, modelUsed } = await callOpenRouterWithFallback(apiKey, prompt);
+        document.getElementById('aiResult').innerHTML =
+            `<div class="muted" style="margin-bottom:8px;">${title} · 모델: ${modelUsed} · ${new Date().toLocaleString('ko-KR')}</div>` +
+            renderMarkdown(content);
+    } catch (e) {
+        document.getElementById('aiResult').innerHTML = `<span class="error-text">오류: ${e.message}</span>`;
+    } finally {
+        document.getElementById('aiLoading').style.display = 'none';
+        document.getElementById('aiResult').style.display = 'block';
+        btn.disabled = false;
+        isBusy = false;
+    }
+}
+
+// ================= 초기화 =================
+goal = loadJSON(LS.goal, null) || getDefaultGoal();
+snapshots = loadJSON(LS.snapshots, []);
+journal = loadJSON(LS.journal, []);
+document.getElementById('jDate').value = new Date().toISOString().slice(0, 10);
+fillGoalForm();
+renderAll();
+initFromSheet();
+</script>
+</body>
+</html>
