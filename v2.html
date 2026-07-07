@@ -144,7 +144,8 @@
 
     <!-- 카드 3: 자산 배분 -->
     <div class="card">
-        <h3>⚖️ 코어-새틀라이트 배분 <span class="muted">(목표: 코어 50~70%)</span></h3>
+        <h3>⚖️ 코어-새틀라이트 배분 <span class="muted">(목표: 코어 50~70%)</span> <button class="btn btn-sm btn-gray" id="allocRefreshBtn" onclick="refreshAllocationPrices()" style="float:right;">🔄 시세 새로고침</button></h3>
+        <div class="muted" id="allocStamp" style="margin:-6px 0 10px;"></div>
         <div class="alloc-bar">
             <div class="alloc-core" id="allocCore" style="width:0%"></div>
             <div class="alloc-band" style="left:50%"></div>
@@ -153,7 +154,7 @@
         <div class="alloc-label"><span>코어 <b id="allocCorePct">-</b></span><span>새틀라이트 <b id="allocSatPct">-</b></span></div>
         <div id="allocWarnings"></div>
         <div class="alloc-list" id="allocList"></div>
-        <p class="muted" style="margin-bottom:0;">* 비중은 각 종목의 마지막 분석 시점 가격(없으면 매입가) 기준 추정입니다. 정확한 값은 스냅샷 자동 계산을 이용하세요.</p>
+        <p class="muted" style="margin-bottom:0;">* 🔄 시세 새로고침(또는 스냅샷 자동 계산)을 누르면 실시간 시세 기준으로 갱신됩니다. 안 누르면 마지막 조회/분석 가격 기준.</p>
     </div>
 
     <!-- 카드 4: 매매 일지 -->
@@ -248,7 +249,8 @@
 const LS = {
     url: 'pf_apps_script_url', secret: 'pf_apps_script_secret',
     openrouter: 'pf_openrouter_key', twelvedata: 'pf_twelvedata_key',
-    goal: 'pf_v2_goal', snapshots: 'pf_v2_snapshots', journal: 'pf_v2_journal', fx: 'pf_v2_usdkrw'
+    goal: 'pf_v2_goal', snapshots: 'pf_v2_snapshots', journal: 'pf_v2_journal', fx: 'pf_v2_usdkrw',
+    prices: 'pf_v2_prices'
 };
 let stocksArray = [];
 let snapshots = [];   // [{month:"2026-07", stocksValue, otherAssets, totalAssets, contribution, note}]
@@ -258,6 +260,7 @@ let orbitChart = null;
 let isBusy = false;
 let sheetLoaded = false;      // 시트 동기화 성공 여부 — 실패 상태에서 보유종목을 덮어쓰지 않기 위한 안전장치
 let pickedStockName = '';     // 한글 검색으로 고른 종목명 (신규 등록 시 이름으로 사용)
+let priceCache = {};          // {ticker: {price, ts}} — 마지막 실시간 조회 시세 (배분 카드 최신화용)
 
 function loadJSON(key, def) { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : def; } catch (e) { return def; } }
 function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { alert('저장 공간이 부족합니다.'); } }
@@ -450,42 +453,74 @@ async function fetchUsdKrw(apiKey) {
 }
 
 // ================= 스냅샷 =================
+// 전 종목 실시간 시세 조회 + 가격 캐시 갱신 (스냅샷 자동계산 · 배분 새로고침 공용)
+async function fetchAllStockPrices() {
+    const tdKey = localStorage.getItem(LS.twelvedata) || '';
+    const hasUs = stocksArray.some(s => !isKoreanTicker(s.ticker));
+    if (hasUs && !tdKey) throw new Error('Twelve Data 키가 없습니다. V1에서 구글시트 동기화를 먼저 실행하세요.');
+
+    const fx = await fetchUsdKrw(tdKey);
+    const results = [];
+    for (const stock of stocksArray) {
+        const isK = isKoreanTicker(stock.ticker);
+        try {
+            const price = isK ? await fetchKoreanPrice(stock.ticker) : await fetchUsPrice(stock.ticker, tdKey);
+            priceCache[stock.ticker] = { price: price, ts: Date.now() };
+            results.push({ ticker: stock.ticker, isK, price, quantity: stock.quantity, valueKRW: isK ? price * stock.quantity : price * stock.quantity * fx });
+        } catch (e) {
+            results.push({ ticker: stock.ticker, isK, price: null });
+        }
+    }
+    saveJSON(LS.prices, priceCache);
+    return { fx, results };
+}
+
 async function autoCalcStocks() {
     if (isBusy) return;
     if (stocksArray.length === 0) { alert('등록된 종목이 없습니다. V1에서 종목을 먼저 등록하세요.'); return; }
-    const tdKey = localStorage.getItem(LS.twelvedata) || '';
-    const hasUs = stocksArray.some(s => !isKoreanTicker(s.ticker));
-    if (hasUs && !tdKey) { alert('Twelve Data 키가 없습니다. V1에서 구글시트 동기화를 먼저 실행하세요.'); return; }
 
     isBusy = true;
     const btn = document.getElementById('autoCalcBtn');
     btn.disabled = true; btn.textContent = '조회 중...';
-    const breakdown = [];
     try {
-        const fx = await fetchUsdKrw(tdKey);
+        const { fx, results } = await fetchAllStockPrices();
         document.getElementById('fxRate').value = fx.toFixed(1);
         document.getElementById('fxNote').textContent = `(자동 조회됨)`;
 
         let totalKRW = 0;
-        for (const stock of stocksArray) {
-            const isK = isKoreanTicker(stock.ticker);
-            try {
-                const price = isK ? await fetchKoreanPrice(stock.ticker) : await fetchUsPrice(stock.ticker, tdKey);
-                const valueKRW = isK ? price * stock.quantity : price * stock.quantity * fx;
-                totalKRW += valueKRW;
-                breakdown.push(`${stock.ticker}: ${isK ? '₩' : '$'}${fmtNum(price)} × ${stock.quantity} = ${fmtKRW(valueKRW)}`);
-            } catch (e) {
-                breakdown.push(`${stock.ticker}: ⚠️ 조회 실패 (합산 제외)`);
-            }
-        }
+        const breakdown = [];
+        results.forEach(r => {
+            if (r.price === null) { breakdown.push(`${r.ticker}: ⚠️ 조회 실패 (합산 제외)`); return; }
+            totalKRW += r.valueKRW;
+            breakdown.push(`${r.ticker}: ${r.isK ? '₩' : '$'}${fmtNum(r.price)} × ${r.quantity} = ${fmtKRW(r.valueKRW)}`);
+        });
         setMoney('snapStocks', totalKRW);
         const bd = document.getElementById('snapBreakdown');
         bd.style.display = 'block';
         bd.innerHTML = breakdown.join('<br>') + `<br><b>합계: ${fmtKRW(totalKRW)}</b> (환율 ${fmtNum(document.getElementById('fxRate').value)}원 적용)`;
+        renderAllocation(); // 새 시세로 배분 카드도 함께 갱신
     } catch (e) {
         alert('자동 계산 실패: ' + e.message);
     } finally {
         isBusy = false; btn.disabled = false; btn.textContent = '🔄 자동 계산';
+    }
+}
+
+// 배분 카드 전용 시세 새로고침 (스냅샷 입력값은 건드리지 않음)
+async function refreshAllocationPrices() {
+    if (isBusy) return;
+    if (stocksArray.length === 0) { alert('등록된 종목이 없습니다.'); return; }
+
+    isBusy = true;
+    const btn = document.getElementById('allocRefreshBtn');
+    btn.disabled = true; btn.textContent = '조회 중...';
+    try {
+        await fetchAllStockPrices();
+        renderAllocation();
+    } catch (e) {
+        alert('시세 조회 실패: ' + e.message);
+    } finally {
+        isBusy = false; btn.disabled = false; btn.textContent = '🔄 시세 새로고침';
     }
 }
 
@@ -673,16 +708,29 @@ function roleOf(stock) {
     return isCoreTicker(stock.ticker) ? '코어' : '새틀라이트';
 }
 
-// 종목별 추정 평가액(원화): 마지막 분석 가격(없으면 매입가) × 수량, 미국 주식은 환율 적용
+// 종목별 추정 평가액(원화) × 수량, 미국 주식은 환율 적용
+// 가격 우선순위: ① 실시간 조회 캐시(시세 새로고침/자동 계산) ② 마지막 분석 시점 가격 ③ 매입가
 function estimateHoldingsKRW() {
     const fx = parseFloat(localStorage.getItem(LS.fx) || '1400');
     return stocksArray.map(s => {
+        const cached = priceCache[s.ticker];
         const lastEntry = (s.history && s.history.length > 0) ? s.history[s.history.length - 1] : null;
-        const price = lastEntry ? lastEntry.currentPrice : s.buyPrice;
+        const price = (cached && cached.price) ? cached.price : (lastEntry ? lastEntry.currentPrice : s.buyPrice);
         const isK = isKoreanTicker(s.ticker);
         const valueKRW = isK ? price * s.quantity : price * s.quantity * fx;
         return { ticker: s.ticker, name: s.name || '', isCore: roleOf(s) === '코어', valueKRW };
     });
+}
+
+// 배분 카드에 "시세 기준 시점" 표시
+function renderAllocStamp() {
+    const el = document.getElementById('allocStamp');
+    if (!el) return;
+    const tss = stocksArray.map(s => priceCache[s.ticker] && priceCache[s.ticker].ts).filter(Boolean);
+    if (tss.length === 0) { el.textContent = '시세 기준: 마지막 분석 시점 가격 (🔄 새로고침으로 실시간 갱신)'; return; }
+    const mins = Math.round((Date.now() - Math.min(...tss)) / 60000);
+    const ago = mins < 1 ? '방금 전' : mins < 60 ? `${mins}분 전` : mins < 1440 ? `${Math.round(mins / 60)}시간 전` : `${Math.round(mins / 1440)}일 전`;
+    el.textContent = `시세 기준: ${ago} 조회`;
 }
 
 // 배분 목록에서 코어↔새틀라이트 역할 전환
@@ -729,6 +777,7 @@ function renderAllocation() {
     listEl.innerHTML =
         (coreHoldings.length ? `<div class="group-head">🏛️ 코어 — 합계 ${corePct.toFixed(1)}%</div>` + coreHoldings.map(rowHtml).join('') : '') +
         (satHoldings.length ? `<div class="group-head">🚀 새틀라이트 — 합계 ${(100 - corePct).toFixed(1)}%</div>` + satHoldings.map(rowHtml).join('') : '');
+    renderAllocStamp();
 }
 
 // ================= 매매 일지 =================
@@ -1016,6 +1065,7 @@ async function runAI(prompt, btnId, title) {
 goal = loadJSON(LS.goal, null) || getDefaultGoal();
 snapshots = loadJSON(LS.snapshots, []);
 journal = loadJSON(LS.journal, []);
+priceCache = loadJSON(LS.prices, {});
 document.getElementById('jDate').value = new Date().toISOString().slice(0, 10);
 fillGoalForm();
 renderAll();
