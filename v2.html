@@ -58,6 +58,9 @@
         .journal-entry .reason { color: #555; margin-top: 5px; line-height: 1.5; }
         .journal-entry .meta { color: #999; font-size: 12px; margin-top: 4px; }
         .del-link { color: #dc3545; font-size: 12px; cursor: pointer; background: none; border: none; padding: 0; }
+        .pick-stock { display: inline-block; margin: 3px 4px 0 0; padding: 5px 10px; border: 1px solid #0d6efd; background: #f0f6ff; color: #0d6efd; border-radius: 5px; cursor: pointer; font-size: 13px; }
+        .pick-stock:hover { background: #0d6efd; color: white; }
+        .role-toggle { background: none; border: 1px solid #ccc; border-radius: 4px; font-size: 11px; padding: 1px 6px; cursor: pointer; color: #666; margin-left: 6px; }
 
         .result-box { min-height: 60px; background-color: #fafafa; border-radius: 6px; padding: 15px; border: 1px solid #eee; line-height: 1.7; font-size: 14px; }
         .result-box h1, .result-box h2, .result-box h3 { margin: 14px 0 6px; color: #1a1a2e; font-size: 15px; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }
@@ -109,12 +112,12 @@
         <details class="settings" style="margin-top:14px;">
             <summary>⚙️ 목표 설정 (금액·기간·수익률)</summary>
             <div class="grid-3" style="margin-top:10px;">
-                <div class="form-group"><label>목표 금액 (원)</label><input type="number" id="goalTarget" class="form-control" placeholder="1000000000"></div>
+                <div class="form-group"><label>목표 금액 (원)</label><input type="text" inputmode="numeric" id="goalTarget" class="form-control" placeholder="1,000,000,000" oninput="fmtMoneyInput(this)"></div>
                 <div class="form-group"><label>시작일</label><input type="date" id="goalStartDate" class="form-control"></div>
                 <div class="form-group"><label>목표일</label><input type="date" id="goalTargetDate" class="form-control"></div>
-                <div class="form-group"><label>시작 시드 (원)</label><input type="number" id="goalStartAmount" class="form-control" placeholder="예: 50000000"></div>
+                <div class="form-group"><label>시작 시드 (원)</label><input type="text" inputmode="numeric" id="goalStartAmount" class="form-control" placeholder="예: 50,000,000" oninput="fmtMoneyInput(this)"></div>
                 <div class="form-group"><label>예상 연수익률 (%)</label><input type="number" id="goalCagr" class="form-control" step="0.5" placeholder="10"></div>
-                <div class="form-group"><label>월 적립액 (원)</label><input type="number" id="goalMonthly" class="form-control" placeholder="1250000"></div>
+                <div class="form-group"><label>월 적립액 (원)</label><input type="text" inputmode="numeric" id="goalMonthly" class="form-control" placeholder="1,250,000" oninput="fmtMoneyInput(this)"></div>
             </div>
             <button class="btn btn-sm" onclick="saveGoal()">목표 저장</button>
         </details>
@@ -127,11 +130,11 @@
         <div class="grid-2">
             <div class="form-group">
                 <label>주식 자산 (원) <button class="btn btn-sm btn-gray" style="margin-left:6px;" onclick="autoCalcStocks()" id="autoCalcBtn">🔄 자동 계산</button></label>
-                <input type="number" id="snapStocks" class="form-control" placeholder="자동 계산 또는 직접 입력">
+                <input type="text" inputmode="numeric" id="snapStocks" class="form-control" placeholder="자동 계산 또는 직접 입력" oninput="fmtMoneyInput(this)">
                 <div class="snap-breakdown" id="snapBreakdown"></div>
             </div>
-            <div class="form-group"><label>기타 자산 — 현금·예금 등 (원)</label><input type="number" id="snapOther" class="form-control" placeholder="0"></div>
-            <div class="form-group"><label>이번 달 적립액 (원)</label><input type="number" id="snapContribution" class="form-control" placeholder="예: 1250000"></div>
+            <div class="form-group"><label>기타 자산 — 현금·예금 등 (원)</label><input type="text" inputmode="numeric" id="snapOther" class="form-control" placeholder="0" oninput="fmtMoneyInput(this)"></div>
+            <div class="form-group"><label>이번 달 적립액 (원)</label><input type="text" inputmode="numeric" id="snapContribution" class="form-control" placeholder="예: 1,250,000" oninput="fmtMoneyInput(this)"></div>
             <div class="form-group"><label>메모 (선택)</label><input type="text" id="snapNote" class="form-control" placeholder="예: 보너스 추가 투입"></div>
         </div>
         <div class="form-group"><label>적용 환율 (USD/KRW) <span class="muted" id="fxNote"></span></label><input type="number" id="fxRate" class="form-control" step="0.1"></div>
@@ -157,17 +160,25 @@
         <h3>📓 매매 일지 <span class="muted">(사기 전에 쓰면 최고, 산 뒤에라도 꼭)</span></h3>
         <div class="grid-3">
             <div class="form-group"><label>날짜</label><input type="date" id="jDate" class="form-control"></div>
-            <div class="form-group"><label>티커</label><input type="text" id="jTicker" class="form-control" placeholder="QQQM"></div>
+            <div class="form-group"><label>티커 / 종목명</label>
+                <div style="display:flex;gap:6px;">
+                    <input type="text" id="jTicker" class="form-control" placeholder="QQQM 또는 삼성전자">
+                    <button type="button" class="btn btn-sm btn-gray" onclick="searchKoreanName()" title="한글 종목명으로 코드 찾기">🔍</button>
+                </div>
+            </div>
             <div class="form-group"><label>매수/매도</label>
                 <select id="jAction" class="form-control"><option value="매수">매수</option><option value="매도">매도</option></select></div>
             <div class="form-group"><label>가격</label><input type="number" id="jPrice" class="form-control" step="0.01"></div>
             <div class="form-group"><label>수량</label><input type="number" id="jQty" class="form-control" step="0.0001"></div>
+            <div class="form-group"><label>역할</label>
+                <select id="jRole" class="form-control"><option value="새틀라이트">🚀 새틀라이트</option><option value="코어">🏛️ 코어</option></select></div>
             <div class="form-group"><label>그때의 감정</label>
                 <select id="jEmotion" class="form-control">
                     <option value="확신">😎 확신</option><option value="무덤덤">😐 무덤덤 (계획대로)</option>
                     <option value="불안">😟 불안</option><option value="FOMO">🔥 FOMO (놓칠까봐)</option><option value="공포">😨 공포</option>
                 </select></div>
         </div>
+        <div id="jSearchResults" style="margin-bottom:8px;"></div>
         <div class="form-group"><label>이유 (한 줄이라도 — 나중에 AI가 복기해줌)</label><input type="text" id="jReason" class="form-control" placeholder="예: 실적 발표 서프라이즈, 200일선 지지 확인"></div>
         <div class="grid-2">
             <div class="form-group"><label>손절선 (선택)</label><input type="text" id="jStopLoss" class="form-control" placeholder="예: $150"></div>
@@ -188,6 +199,46 @@
         <div class="loading" id="aiLoading" style="display:none;">AI 분석 중... (무료 모델 혼잡 시 자동 재시도, 최대 1분)</div>
         <div class="result-box" id="aiResult" style="display:none;"></div>
     </div>
+
+    <!-- 카드 6: 도움말 -->
+    <div class="card">
+        <details class="settings">
+            <summary>❓ 도움말 — 사용법 & 계산 로직</summary>
+            <div style="font-size:13px; line-height:1.8; margin-top:10px;">
+                <b>📆 매달 루틴 (5분)</b><br>
+                ① 월급날: 적립 실행 → <b>이번 달 체크</b>에서 "🔄 자동 계산" → 기타 자산(현금·예금) 입력 → 스냅샷 저장<br>
+                ② 매매했다면: <b>매매 일지</b>에 이유·감정과 함께 기록 (보유 종목 수량·평단이 자동 반영됨)<br>
+                ③ 월말: 🛰️ 궤도 종합분석 한 번 실행<br><br>
+
+                <b>🧭 궤도 판정 원리</b><br>
+                계획 곡선 = 시작 시드×복리 + 월 적립×적립복리 (설정한 연수익률 기준).
+                매달 기록한 실제 총자산이 이 곡선 위에 있으면 "앞섬 ✅", 아래면 "뒤처짐 ⚠️".
+                뒤처짐의 원인이 적립 부족인지 수익률 부족인지는 궤도 분석 AI가 분해해서 알려줍니다.<br><br>
+
+                <b>📓 매매 일지 → 보유 종목 자동 반영 규칙</b><br>
+                · 매수: 이미 있는 종목이면 수량 증가 + 평단 가중평균 재계산 / 없으면 자동 등록<br>
+                · 매도: 수량 차감, 0이 되면 제거 여부 물어봄<br>
+                · 한국 주식: 🔍 버튼으로 한글 이름 검색 → 코드 자동 입력 / 미국 주식: 티커 직접 입력<br><br>
+
+                <b>🏛️ 코어/새틀라이트 판정</b><br>
+                기본은 티커 자동 판정(QQQ·SPY·VOO·IVV = 코어). 아니라면 배분 카드에서 "전환" 버튼으로 직접 지정하세요. 한 번 지정하면 구글시트에 저장됩니다.<br><br>
+
+                <b>💾 데이터 저장 위치</b><br>
+                모든 데이터는 <b>내 구글시트</b>(Stocks·Snapshots·Journal·Settings 탭)에 저장되고, 이 브라우저에도 캐시됩니다.
+                다른 기기에서 열어도 시트에서 자동으로 불러옵니다.<br><br>
+
+                <b>🔗 V1과의 관계</b><br>
+                V1(<a href="./index.html">index.html</a>)은 종목별 AI 심층 분석·기술지표 진단 전용,
+                V2는 목표 관리·일지·자산 추적 전용입니다. 같은 구글시트를 공유하므로 어느 쪽에서 수정해도 서로 반영됩니다.<br><br>
+
+                <b>🔧 문제 해결</b><br>
+                · "모든 무료 모델이 응답하지 않습니다" → 무료 AI 혼잡(429). 몇 분 뒤 재시도<br>
+                · 시세 자동 계산 실패 → Twelve Data 무료 한도(분당 8회) 초과 가능. 1분 뒤 재시도<br>
+                · 동기화 실패 → V1 설정에서 Apps Script URL·비밀키 확인<br>
+                자세한 로직은 저장소의 <a href="https://github.com/whiteinsun1/portfolio-ai#readme" target="_blank">README</a> 참고.
+            </div>
+        </details>
+    </div>
 </div>
 
 <script>
@@ -204,6 +255,8 @@ let journal = [];     // [{id, date, ticker, action, price, quantity, reason, st
 let goal = null;      // {target, startDate, targetDate, startAmount, cagr, monthly}
 let orbitChart = null;
 let isBusy = false;
+let sheetLoaded = false;      // 시트 동기화 성공 여부 — 실패 상태에서 보유종목을 덮어쓰지 않기 위한 안전장치
+let pickedStockName = '';     // 한글 검색으로 고른 종목명 (신규 등록 시 이름으로 사용)
 
 function loadJSON(key, def) { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : def; } catch (e) { return def; } }
 function saveJSON(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { alert('저장 공간이 부족합니다.'); } }
@@ -229,6 +282,20 @@ function fmtKRW(v) {
 }
 function fmtNum(v) { return Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
 function currentMonthKey() { return new Date().toISOString().slice(0, 7); }
+
+// 금액 입력란: 타이핑하는 즉시 천 단위 콤마 표시 (숫자만 허용)
+function fmtMoneyInput(el) {
+    const digits = el.value.replace(/[^\d]/g, '');
+    el.value = digits ? Number(digits).toLocaleString() : '';
+}
+// 콤마 입력란에서 숫자 값 읽기
+function moneyVal(id) {
+    return parseFloat((document.getElementById(id).value || '').replace(/,/g, '')) || 0;
+}
+// 콤마 입력란에 숫자 값 채우기
+function setMoney(id, v) {
+    document.getElementById(id).value = (v || v === 0) ? Math.round(v).toLocaleString() : '';
+}
 
 // ================= 목표 수학 =================
 function monthlyRate(cagrPct) { return Math.pow(1 + cagrPct / 100, 1 / 12) - 1; }
@@ -279,6 +346,7 @@ async function postToSheet(payload) {
 
 function syncSnapshotsToSheet() { postToSheet({ action: 'saveSnapshots', snapshots }); }
 function syncJournalToSheet() { postToSheet({ action: 'saveJournal', journal }); }
+function syncStocksToSheet() { postToSheet({ action: 'saveStocks', stocks: stocksArray }); }
 function syncGoalToSheet() {
     postToSheet({ action: 'saveSettings', settings: {
         goal_target: String(goal.target), goal_start_date: goal.startDate, goal_target_date: goal.targetDate,
@@ -335,6 +403,7 @@ async function initFromSheet() {
                 saveJSON(LS.goal, goal);
             }
         }
+        sheetLoaded = true;
         statusEl.textContent = '✅ 동기화 완료';
         setTimeout(() => { statusEl.textContent = ''; }, 2500);
     } catch (e) {
@@ -408,7 +477,7 @@ async function autoCalcStocks() {
                 breakdown.push(`${stock.ticker}: ⚠️ 조회 실패 (합산 제외)`);
             }
         }
-        document.getElementById('snapStocks').value = Math.round(totalKRW);
+        setMoney('snapStocks', totalKRW);
         const bd = document.getElementById('snapBreakdown');
         bd.style.display = 'block';
         bd.innerHTML = breakdown.join('<br>') + `<br><b>합계: ${fmtKRW(totalKRW)}</b> (환율 ${fmtNum(document.getElementById('fxRate').value)}원 적용)`;
@@ -420,9 +489,9 @@ async function autoCalcStocks() {
 }
 
 function saveSnapshot() {
-    const stocksValue = parseFloat(document.getElementById('snapStocks').value) || 0;
-    const otherAssets = parseFloat(document.getElementById('snapOther').value) || 0;
-    const contribution = parseFloat(document.getElementById('snapContribution').value) || 0;
+    const stocksValue = moneyVal('snapStocks');
+    const otherAssets = moneyVal('snapOther');
+    const contribution = moneyVal('snapContribution');
     const note = document.getElementById('snapNote').value.trim();
     if (stocksValue === 0 && otherAssets === 0) { alert('주식 자산 또는 기타 자산을 입력해주세요.'); return; }
 
@@ -445,12 +514,12 @@ function saveSnapshot() {
 // ================= 목표 =================
 function saveGoal() {
     const g = {
-        target: parseFloat(document.getElementById('goalTarget').value) || 1000000000,
+        target: moneyVal('goalTarget') || 1000000000,
         startDate: document.getElementById('goalStartDate').value || getDefaultGoal().startDate,
         targetDate: document.getElementById('goalTargetDate').value || getDefaultGoal().targetDate,
-        startAmount: parseFloat(document.getElementById('goalStartAmount').value) || 0,
+        startAmount: moneyVal('goalStartAmount'),
         cagr: parseFloat(document.getElementById('goalCagr').value) || 10,
-        monthly: parseFloat(document.getElementById('goalMonthly').value) || 1250000
+        monthly: moneyVal('goalMonthly') || 1250000
     };
     goal = g;
     saveJSON(LS.goal, goal);
@@ -460,12 +529,12 @@ function saveGoal() {
 }
 
 function fillGoalForm() {
-    document.getElementById('goalTarget').value = goal.target;
+    setMoney('goalTarget', goal.target);
     document.getElementById('goalStartDate').value = goal.startDate;
     document.getElementById('goalTargetDate').value = goal.targetDate;
-    document.getElementById('goalStartAmount').value = goal.startAmount;
+    setMoney('goalStartAmount', goal.startAmount);
     document.getElementById('goalCagr').value = goal.cagr;
-    document.getElementById('goalMonthly').value = goal.monthly;
+    setMoney('goalMonthly', goal.monthly);
 }
 
 // ================= 렌더링 =================
@@ -581,9 +650,9 @@ function renderChecklist() {
     if (snap) {
         el.innerHTML = `<span class="month-done">✅ 이번 달 스냅샷 기록 완료</span> — 총자산 ${fmtKRW(snap.totalAssets)}` +
             (snap.contribution > 0 ? ` · 적립 ${fmtKRW(snap.contribution)} 완료 💪` : ' · <span class="month-todo">적립액이 기록되지 않았어요</span>');
-        document.getElementById('snapStocks').value = snap.stocksValue;
-        document.getElementById('snapOther').value = snap.otherAssets;
-        document.getElementById('snapContribution').value = snap.contribution;
+        setMoney('snapStocks', snap.stocksValue);
+        setMoney('snapOther', snap.otherAssets);
+        setMoney('snapContribution', snap.contribution);
         document.getElementById('snapNote').value = snap.note || '';
     } else {
         el.innerHTML = `<span class="month-todo">📌 이번 달 스냅샷이 아직 없어요.</span> 자동 계산 → 기타 자산 입력 → 저장 (1분 소요)`;
@@ -597,6 +666,12 @@ function isCoreTicker(ticker) {
     return ticker.includes('QQQ') || ticker.includes('SPY') || ticker.includes('VOO') || ticker.includes('IVV');
 }
 
+// 종목의 역할: 사용자가 지정한 role 우선, 없으면 티커로 자동 판정 (QQQ/SPY/VOO/IVV = 코어)
+function roleOf(stock) {
+    if (stock.role === '코어' || stock.role === '새틀라이트') return stock.role;
+    return isCoreTicker(stock.ticker) ? '코어' : '새틀라이트';
+}
+
 // 종목별 추정 평가액(원화): 마지막 분석 가격(없으면 매입가) × 수량, 미국 주식은 환율 적용
 function estimateHoldingsKRW() {
     const fx = parseFloat(localStorage.getItem(LS.fx) || '1400');
@@ -605,8 +680,17 @@ function estimateHoldingsKRW() {
         const price = lastEntry ? lastEntry.currentPrice : s.buyPrice;
         const isK = isKoreanTicker(s.ticker);
         const valueKRW = isK ? price * s.quantity : price * s.quantity * fx;
-        return { ticker: s.ticker, name: s.name || '', isCore: isCoreTicker(s.ticker), valueKRW };
+        return { ticker: s.ticker, name: s.name || '', isCore: roleOf(s) === '코어', valueKRW };
     });
+}
+
+// 배분 목록에서 코어↔새틀라이트 역할 전환
+function toggleRole(ticker) {
+    const stock = stocksArray.find(s => s.ticker === ticker);
+    if (!stock) return;
+    stock.role = roleOf(stock) === '코어' ? '새틀라이트' : '코어';
+    if (sheetLoaded) syncStocksToSheet();
+    renderAllocation();
 }
 
 function renderAllocation() {
@@ -639,20 +723,52 @@ function renderAllocation() {
 
     listEl.innerHTML = holdings
         .sort((a, b) => b.valueKRW - a.valueKRW)
-        .map(h => `<div class="row"><span>${h.isCore ? '🏛️' : '🚀'} ${h.ticker}${h.name ? ` (${h.name})` : ''}</span><span><b>${(h.valueKRW / total * 100).toFixed(1)}%</b> · ${fmtKRW(h.valueKRW)}</span></div>`)
+        .map(h => `<div class="row"><span>${h.isCore ? '🏛️' : '🚀'} ${h.ticker}${h.name ? ` (${h.name})` : ''}<button class="role-toggle" onclick="toggleRole('${h.ticker}')" title="코어/새틀라이트 전환">${h.isCore ? '코어' : '새틀'} 전환</button></span><span><b>${(h.valueKRW / total * 100).toFixed(1)}%</b> · ${fmtKRW(h.valueKRW)}</span></div>`)
         .join('');
 }
 
 // ================= 매매 일지 =================
+// 네이버 자동완성으로 한글 종목명 → 6자리 코드 검색 (미국 티커는 그냥 직접 입력)
+async function searchKoreanName() {
+    const q = document.getElementById('jTicker').value.trim();
+    const box = document.getElementById('jSearchResults');
+    if (!q) { alert('종목명을 입력하고 🔍를 누르세요 (예: 삼성전자)'); return; }
+    box.innerHTML = '<span class="muted">검색 중...</span>';
+    try {
+        const target = `https://m.stock.naver.com/front-api/search/autoComplete?query=${encodeURIComponent(q)}&target=stock`;
+        const res = await fetch(`https://r.jina.ai/${target}`);
+        const text = await res.text();
+        const jsonMatch = text.match(/\{.*\}/s);
+        if (!jsonMatch) throw new Error('응답 해석 불가');
+        const data = JSON.parse(jsonMatch[0]);
+        const items = (data.result && data.result.items) || data.items || [];
+        if (items.length === 0) {
+            box.innerHTML = '<span class="muted">검색 결과 없음 — 6자리 종목코드를 직접 입력하세요.</span>';
+            return;
+        }
+        box.innerHTML = '선택: ' + items.slice(0, 6).map(it =>
+            `<button type="button" class="pick-stock" onclick="pickStock('${it.code}','${(it.name || '').replace(/'/g, '')}')">${it.name} (${it.code})</button>`).join('');
+    } catch (e) {
+        box.innerHTML = `<span class="error-text">검색 실패 — 6자리 종목코드를 직접 입력하세요. (${e.message})</span>`;
+    }
+}
+
+function pickStock(code, name) {
+    document.getElementById('jTicker').value = code;
+    pickedStockName = name;
+    document.getElementById('jSearchResults').innerHTML = `<span class="muted">✅ 선택됨: ${name} (${code})</span>`;
+}
+
 function addJournalEntry() {
     const ticker = document.getElementById('jTicker').value.trim().toUpperCase();
     const price = parseFloat(document.getElementById('jPrice').value);
     const quantity = parseFloat(document.getElementById('jQty').value);
     const reason = document.getElementById('jReason').value.trim();
     if (!ticker || !price || !quantity) { alert('티커·가격·수량을 입력해주세요.'); return; }
+    if (/[가-힣]/.test(ticker)) { alert('한글 종목명은 🔍 버튼으로 검색해서 코드를 선택해주세요.'); return; }
     if (!reason) { alert('이유를 한 줄이라도 적어주세요 — 이게 이 일지의 핵심입니다!'); return; }
 
-    journal.push({
+    const entry = {
         id: String(Date.now()),
         date: document.getElementById('jDate').value || new Date().toISOString().slice(0, 10),
         ticker,
@@ -661,12 +777,53 @@ function addJournalEntry() {
         stopLoss: document.getElementById('jStopLoss').value.trim(),
         targetPrice: document.getElementById('jTarget').value.trim(),
         emotion: document.getElementById('jEmotion').value
-    });
+    };
+    journal.push(entry);
     journal.sort((a, b) => a.date.localeCompare(b.date));
     saveJSON(LS.journal, journal);
     syncJournalToSheet();
+
+    // 일지 내용을 보유 종목에 자동 반영 (수량·평단 재계산)
+    applyJournalToHoldings(entry, document.getElementById('jRole').value, pickedStockName);
+
+    pickedStockName = '';
+    document.getElementById('jSearchResults').innerHTML = '';
     ['jTicker', 'jPrice', 'jQty', 'jReason', 'jStopLoss', 'jTarget'].forEach(id => document.getElementById(id).value = '');
     renderJournal();
+}
+
+// 매수: 수량 증가 + 가중평균 평단 재계산 (신규 종목이면 자동 등록)
+// 매도: 수량 차감, 0이 되면 제거 여부 확인
+function applyJournalToHoldings(j, role, stockName) {
+    if (!sheetLoaded) {
+        alert('⚠️ 구글시트 연결 전이라 일지만 기록했어요. 보유 종목 반영은 시트 연결 후 다시 기록하거나 V1에서 직접 수정하세요.');
+        return;
+    }
+    const idx = stocksArray.findIndex(s => s.ticker === j.ticker);
+    if (j.action === '매수') {
+        if (idx >= 0) {
+            const s = stocksArray[idx];
+            const newQty = s.quantity + j.quantity;
+            s.buyPrice = Math.round(((s.quantity * s.buyPrice + j.quantity * j.price) / newQty) * 10000) / 10000;
+            s.quantity = newQty;
+            s.role = role;
+        } else {
+            stocksArray.push({ id: j.ticker, ticker: j.ticker, name: stockName || '', quantity: j.quantity, buyPrice: j.price, role: role, history: [] });
+        }
+    } else {
+        if (idx < 0) { alert('보유 목록에 없는 종목이라 일지만 기록했습니다.'); return; }
+        const s = stocksArray[idx];
+        s.quantity = Math.round((s.quantity - j.quantity) * 10000) / 10000;
+        if (s.quantity <= 0) {
+            if (confirm(`${j.ticker} 보유 수량이 0이 되었습니다. 보유 목록에서 제거할까요?\n(제거하면 이 종목의 분석 히스토리도 함께 삭제됩니다)`)) {
+                stocksArray.splice(idx, 1);
+            } else {
+                s.quantity = 0;
+            }
+        }
+    }
+    syncStocksToSheet();
+    renderAllocation();
 }
 
 function deleteJournalEntry(id) {
