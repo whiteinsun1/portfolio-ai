@@ -1239,7 +1239,10 @@ async function analyzePortfolioOverall() {
 function renderMarkdown(text) {
     // marked 라이브러리가 로드된 경우 사용, 미로드 시 줄바꿈만 처리
     if (typeof marked !== 'undefined') {
-        return marked.parse(text);
+        // "10~15%" 같은 범위 표기의 물결표를 marked가 취소선(~...~)으로 해석해
+        // 숫자를 뭉개는 문제 방지 — 단독 ~는 이스케이프 (~~ 취소선은 유지)
+        const safe = text.replace(/(^|[^~])~(?!~)/g, '$1\\~');
+        return marked.parse(safe);
     }
     return text.replace(/\n/g, '<br>');
 }

@@ -963,7 +963,12 @@ async function callOpenRouterWithFallback(apiKey, promptMessage) {
 }
 
 function renderMarkdown(text) {
-    if (typeof marked !== 'undefined') return marked.parse(text);
+    if (typeof marked !== 'undefined') {
+        // "10~15%" 같은 범위 표기의 물결표를 marked가 취소선(~...~)으로 해석해
+        // 숫자를 뭉개는 문제 방지 — 단독 ~는 이스케이프 (~~ 취소선은 유지)
+        const safe = text.replace(/(^|[^~])~(?!~)/g, '$1\\~');
+        return marked.parse(safe);
+    }
     return text.replace(/\n/g, '<br>');
 }
 
@@ -1197,7 +1202,9 @@ ${prevText}
 ### 5. 📍 다음 검증 체크포인트
 "___가 ___이면 이 리포트의 판단은 틀린 것" 형식 2개. 구체적 가격·날짜·이벤트 포함.
 
-**스타일**: 숫자와 근거 중심. "상황 봐서", "적절히" 금지. 직전 리포트가 있다면 판단이 달라진 부분과 그 이유를 명시.`;
+**스타일**: 숫자와 근거 중심. "상황 봐서", "적절히" 금지. 직전 리포트가 있다면 판단이 달라진 부분과 그 이유를 명시.
+가격·평단을 언급할 때는 위 데이터의 통화 기호(₩/$)를 그대로 사용하고 임의로 환산하지 마세요.
+매매 일지가 비어 있으면 투자자의 행동 성향에 대한 추정은 하지 마세요 — 데이터가 없다고만 언급하세요.`;
 }
 
 async function runPremiumAnalysis() {
@@ -1224,9 +1231,10 @@ async function runPremiumAnalysis() {
         const liveHoldingsText = results.map(r => {
             const stock = stocksArray.find(s => s.ticker === r.ticker);
             if (r.price === null) return `- ${r.ticker}: 시세 조회 실패`;
+            const cur = r.isK ? '₩' : '$';
             const buyTotal = stock.buyPrice * stock.quantity * (r.isK ? 1 : fx);
             const plPct = ((r.valueKRW - buyTotal) / buyTotal * 100).toFixed(1);
-            return `- [${roleOf(stock)}] ${stock.name || r.ticker} (${r.ticker}): 현재가 ${r.isK ? '₩' : '$'}${fmtNum(r.price)}, 평가 ${fmtKRW(r.valueKRW)}, 수익률 ${plPct}%, 비중 ${(r.valueKRW / totalKRW * 100).toFixed(1)}%`;
+            return `- [${roleOf(stock)}] ${stock.name || r.ticker} (${r.ticker}): 평균매입가 ${cur}${fmtNum(stock.buyPrice)}, 현재가 ${cur}${fmtNum(r.price)}, 보유 ${fmtNum(stock.quantity)}주, 평가 ${fmtKRW(r.valueKRW)}, 수익률 ${plPct}%, 비중 ${(r.valueKRW / totalKRW * 100).toFixed(1)}%`;
         }).join('\n');
 
         const regimeText = await fetchMarketRegimeText();
