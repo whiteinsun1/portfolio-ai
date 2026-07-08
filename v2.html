@@ -956,6 +956,48 @@ function renderMarkdown(text) {
     return text.replace(/\n/g, '<br>');
 }
 
+// 직전 분석 발췌 — 결론부는 보통 끝에 있으므로 마지막 부분을 사용
+function excerptForPrompt(text, maxLen = 700) {
+    if (!text) return '';
+    return text.length > maxLen ? '…' + text.slice(-maxLen) : text;
+}
+
+// 시장 국면: 나스닥100(QQQ)이 200일선 위/아래인지 (V1과 캐시 공유, 12시간 유효)
+async function fetchMarketRegimeText() {
+    try {
+        let regime = JSON.parse(localStorage.getItem('pf_market_regime') || 'null');
+        if (!regime || Date.now() - regime.ts >= 12 * 60 * 60 * 1000) {
+            const tdKey = localStorage.getItem(LS.twelvedata) || '';
+            if (tdKey) {
+                const res = await fetch(`https://api.twelvedata.com/time_series?symbol=QQQ&interval=1day&outputsize=220&apikey=${encodeURIComponent(tdKey)}`);
+                const data = await res.json();
+                if (data.values && data.values.length >= 200) {
+                    const closes = data.values.map(v => parseFloat(v.close)).reverse();
+                    const sma200 = closes.slice(-200).reduce((a, b) => a + b, 0) / 200;
+                    const last = closes[closes.length - 1];
+                    regime = { above200: last >= sma200, diffPct: ((last / sma200 - 1) * 100).toFixed(1), ts: Date.now() };
+                    localStorage.setItem('pf_market_regime', JSON.stringify(regime));
+                }
+            }
+        }
+        if (!regime) return '';
+        return `\n## 시장 국면 (벤치마크 기준점)
+- 나스닥100(QQQ)은 현재 200일선 ${regime.above200 ? '위' : '아래'} (200일선 대비 ${regime.diffPct >= 0 ? '+' : ''}${regime.diffPct}%)
+- ${regime.above200 ? '상승 국면: 검증된 새틀라이트에 대한 불타기(피라미딩)가 허용되는 환경입니다.' : '조정/하락 국면: 새틀라이트 신규·추가매수는 원칙적으로 보류하고, 코어 적립과 현금 대기를 우선하세요.'}
+`;
+    } catch (e) { return ''; }
+}
+
+// 같은 유형의 직전 분석 기록 발췌 (연속성 유지)
+function buildPrevV2AnalysisText(typeKeyword, label) {
+    const prev = v2History.filter(h => h.type && h.type.includes(typeKeyword)).slice(-1)[0];
+    if (!prev) return '';
+    return `\n## 직전 ${label} (${new Date(prev.date).toLocaleDateString('ko-KR')}) 결론 발췌
+"${excerptForPrompt(prev.aiText)}"
+**지시**: 이번 판단이 직전과 다르다면 그 사이에 실제로 무엇이 변했는지 명시하세요. 변한 것이 없다면 판단을 뒤집지 마세요.
+`;
+}
+
 const INVESTOR_PROFILE_V2 = `
 ## 투자자 프로필
 - 목표: 경제적 자유. 10년 장기 복리로 시드머니를 우상향시키는 평범한 직장인.
@@ -986,6 +1028,7 @@ function buildGoalContext() {
 - 경과: ${(nNow / nTotal * 100).toFixed(1)}% (${nNow.toFixed(0)}개월 / 총 ${nTotal.toFixed(0)}개월)
 - 현재 총자산: ${fmtKRW(current)} / 이 시점 계획값: ${fmtKRW(planNow)} (${current >= planNow ? '앞섬 +' : '뒤처짐 '}${((current - planNow) / planNow * 100).toFixed(1)}%)
 - 설정: 월 적립 ${fmtKRW(goal.monthly)} · 예상 연수익률 ${goal.cagr}%
+- 대기 현금(기타 자산): ${last && last.otherAssets ? fmtKRW(last.otherAssets) + ' — 제안 금액은 이 범위 안에서 집행 가능해야 함' : '미기록'}
 
 ## 최근 자산 스냅샷 (월별)
 ${recentSnaps}`;
@@ -1008,22 +1051,27 @@ async function runOrbitAnalysis() {
     const apiKey = localStorage.getItem(LS.openrouter) || '';
     if (!apiKey) { alert('OpenRouter 키가 없습니다. V1에서 구글시트 동기화를 먼저 실행하세요.'); return; }
 
+    const regimeText = await fetchMarketRegimeText();
+    const prevText = buildPrevV2AnalysisText('궤도', '궤도 분석');
+
     const prompt = `당신은 10년 자산 목표를 관리하는 전담 재무 코치입니다. 아래 데이터로 궤도 진단을 하세요.
 ${INVESTOR_PROFILE_V2}
 
 ${buildGoalContext()}
 
 ${buildHoldingsContext()}
-
-## 요청 (한국어, JSON 없이, 4개 섹션)
+${regimeText}${prevText}
+## 요청 (한국어, JSON 없이, 5개 섹션)
 ### 1. 🛰️ 궤도 진단
 계획 대비 현재 위치를 판정하고, 차이의 원인을 분해하세요: (a) 적립을 계획만큼 했는가 (b) 수익률이 계획을 따라오는가. 스냅샷 추이로 판단하세요.
 ### 2. 📐 향후 12개월 우선순위
 지금 궤도에서 목표 달성 확률을 높이는 순서를 정하세요. 적립 증액 / 배분 교정 / 종목 교체 중 무엇이 가장 효과가 큰지 숫자로 비교하세요.
 ### 3. ⚖️ 배분 처방
-코어 50~70% 밴드 기준으로 현재 배분을 평가하고, 이번 달 적립 100~150만원의 구체적 배분(종목·금액)을 제시하세요. 물타기 금지 원칙을 지키세요.
+코어 50~70% 밴드 기준으로 현재 배분을 평가하고, 이번 달 적립 100~150만원의 구체적 배분(종목·금액)을 제시하세요. 물타기 금지 원칙과 시장 국면을 반영하고, 대기 현금 범위 안에서 집행 가능한 금액만 제안하세요.
 ### 4. ✅ 이번 달 행동 3줄
-당장 실행할 것 3줄. 종목명·금액 포함, 모호한 표현 금지.`;
+당장 실행할 것 3줄. 종목명·금액 포함, 모호한 표현 금지.
+### 5. 📍 다음 검증 체크포인트
+"___가 ___이면 이번 판단은 틀린 것" 형식으로, 다음 궤도 분석 때 확인할 반증 조건 1개를 제시하세요.`;
 
     await runAI(prompt, 'orbitBtn', '🛰️ 10년 궤도 종합분석');
 }
@@ -1037,6 +1085,8 @@ async function runJournalReview() {
     const entries = journal.map(j =>
         `- ${j.date} ${j.ticker} ${j.action} @${j.price} ×${j.quantity} | 감정:${j.emotion} | 이유:"${j.reason}" | 손절:${j.stopLoss || '미설정'} 목표:${j.targetPrice || '미설정'}`).join('\n');
 
+    const prevReviewText = buildPrevV2AnalysisText('복기', '행동 복기');
+
     const prompt = `당신은 투자 행동심리 코치입니다. 아래는 한 직장인 투자자의 매매 일지 전체입니다.
 개인투자자는 '행동 갭' 때문에 보유 자산 수익률보다 연 1~2%p 덜 법니다. 이 투자자의 일지에서 그 패턴을 찾아 교정해주세요.
 ${INVESTOR_PROFILE_V2}
@@ -1045,9 +1095,11 @@ ${INVESTOR_PROFILE_V2}
 ${entries}
 
 ${buildGoalContext()}
-
-## 요청 (한국어, JSON 없이, 4개 섹션)
-### 1. 🪞 행동 패턴 진단
+${prevReviewText}
+## 요청 (한국어, JSON 없이, ${prevReviewText ? '5' : '4'}개 섹션)
+${prevReviewText ? `### 0. 📋 지난 복기 이행 점검
+지난 복기에서 지적한 습관과 교정 처방이 그 이후의 매매 기록에서 지켜졌는지 **먼저** 평가하세요. 지켜졌으면 인정하고, 반복됐으면 구체적 기록을 들어 지적하세요.
+` : ''}### 1. 🪞 행동 패턴 진단
 일지에서 반복되는 패턴을 찾으세요: 물타기 흔적(하락 종목 반복 매수), FOMO 매수(감정:FOMO + 고점 매수), 손절선 미설정 습관, 공포 매도 등. 구체적 기록을 인용하며 지적하세요.
 ### 2. ⚠️ 가장 위험한 습관 1가지
 10년 복리를 가장 크게 갉아먹을 습관 하나를 지목하고, 그 습관이 10년간 반복되면 자산에 미칠 영향을 추정하세요.
