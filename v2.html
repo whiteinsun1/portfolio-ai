@@ -28,7 +28,24 @@
         .btn-sm { width: auto; padding: 6px 12px; font-size: 13px; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
-        @media (max-width: 560px) { .grid-3 { grid-template-columns: 1fr; } .grid-2 { grid-template-columns: 1fr; } }
+        /* 모바일 대응 */
+        @media (max-width: 560px) {
+            body { padding: 10px; }
+            .container { gap: 12px; }
+            .card { padding: 14px; border-radius: 8px; }
+            h2 { font-size: 18px; }
+            .grid-3, .grid-2 { grid-template-columns: 1fr; gap: 8px; }
+            .stat .value { font-size: 18px; }
+            .chart-wrap { height: 210px; }
+            /* iOS는 입력창 글자가 16px보다 작으면 터치 시 화면을 자동 확대함 */
+            .form-control { font-size: 16px; }
+            /* 손가락으로 누르기 쉽게 터치 영역 확대 */
+            .role-toggle { padding: 5px 10px; font-size: 12px; }
+            .del-link { padding: 4px 6px; }
+            .pick-stock { padding: 8px 12px; }
+            /* 배분 카드 제목 옆 시세 새로고침 버튼을 아래 줄 전체 폭으로 */
+            #allocRefreshBtn { float: none !important; display: block; width: 100%; margin: 8px 0 0; }
+        }
 
         /* 대시보드 숫자 */
         .big-stats { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; }
@@ -70,7 +87,11 @@
         .hist-entry .md-content { line-height: 1.7; }
         .hist-entry .md-content h1, .hist-entry .md-content h2, .hist-entry .md-content h3 { font-size: 14px; margin: 10px 0 4px; }
 
-        .result-box { min-height: 60px; background-color: #fafafa; border-radius: 6px; padding: 15px; border: 1px solid #eee; line-height: 1.7; font-size: 14px; }
+        .result-box { min-height: 60px; background-color: #fafafa; border-radius: 6px; padding: 15px; border: 1px solid #eee; line-height: 1.7; font-size: 14px; overflow-wrap: break-word; }
+        /* 리포트 안 마크다운 표(종목별 판정표 등) — 좁은 화면에선 표 자체만 가로 스크롤 */
+        .result-box table, .hist-entry .md-content table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 8px 0; }
+        .result-box th, .result-box td, .hist-entry .md-content th, .hist-entry .md-content td { border: 1px solid #ddd; padding: 5px 8px; font-size: 13px; white-space: nowrap; }
+        .result-box th, .hist-entry .md-content th { background: #f0f4ff; }
         .result-box h1, .result-box h2, .result-box h3 { margin: 14px 0 6px; color: #1a1a2e; font-size: 15px; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }
         .result-box strong { color: #0d3875; }
         .result-box ul, .result-box ol { margin: 6px 0 6px 20px; padding: 0; }

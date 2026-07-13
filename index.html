@@ -66,6 +66,33 @@
         details.card summary::-webkit-details-marker { display: none; }
         details.card summary::after { content: '▼'; font-size: 11px; color: #aaa; }
         details.card[open] summary::after { content: '▲'; }
+
+        /* AI 리포트 안 마크다운 표 — 모바일에서 가로 스크롤로 처리 */
+        .result-box table, .history-entry .md-content table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 8px 0; }
+        .result-box th, .result-box td, .history-entry .md-content th, .history-entry .md-content td { border: 1px solid #ddd; padding: 5px 8px; font-size: 13px; white-space: nowrap; }
+        .result-box th, .history-entry .md-content th { background: #f0f4ff; }
+        .result-box { overflow-wrap: break-word; }
+
+        /* 모바일 대응 */
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .container { gap: 12px; }
+            .card { padding: 14px; }
+            h2 { font-size: 19px; margin-bottom: 12px; }
+            h2 a { display: inline-block; margin-top: 4px; }
+            .left-panel, .right-panel { flex: 1 1 100%; min-width: 0; }
+            /* iOS는 입력창 글자가 16px보다 작으면 터치 시 화면을 자동 확대함 */
+            .form-control, .edit-form input { font-size: 16px; }
+            /* 종목 등록: 티커는 한 줄 전체, 수량·평단은 반반 */
+            .reg-row { flex-wrap: wrap; }
+            .reg-row .form-group:first-child { flex: 1 1 100% !important; }
+            .reg-row .form-group { min-width: calc(50% - 8px); }
+            /* 종합 분석 · 히스토리 버튼 세로로 쌓기 */
+            .action-row { flex-wrap: wrap; }
+            .action-row .btn { flex: 1 1 100% !important; }
+            .stock-card-buttons button { padding: 10px 6px; }
+            .chart-wrap { height: 190px; }
+        }
     </style>
 </head>
 <body>
@@ -112,7 +139,7 @@
         <div class="card">
             <h3 style="margin-top:0;">🛠️ 종목 등록</h3>
             <p style="font-size: 12px; color: #888; margin-top: 0;">미국 주식은 티커(예: AAPL), 한국 주식은 6자리 종목코드(예: 삼성전자 005930)를 입력하세요.</p>
-            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+            <div class="reg-row" style="display: flex; gap: 8px; margin-bottom: 10px;">
                 <div class="form-group" style="flex:2; margin:0;">
                     <label>티커 / 종목코드</label>
                     <input type="text" id="tickerInput" class="form-control" placeholder="AAPL / 005930">
@@ -133,7 +160,7 @@
         <div class="card">
             <h3 style="margin-top:0;">📋 보유 종목</h3>
             <div id="portfolioSummary" style="display:none; margin-bottom: 12px; padding: 10px 12px; background: #f0f4ff; border-radius: 6px; border: 1px solid #c9d8f5; font-size: 13px; line-height: 1.7;"></div>
-            <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <div class="action-row" style="display:flex; gap:8px; margin-bottom:12px;">
                 <button class="btn btn-portfolio" style="flex:2;" onclick="analyzePortfolioOverall()">📊 포트폴리오 종합 분석</button>
                 <button class="btn" style="flex:1; background:#6c757d;" onclick="showPortfolioHistory()">📈 종합 히스토리</button>
             </div>
