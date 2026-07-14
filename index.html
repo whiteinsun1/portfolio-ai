@@ -257,6 +257,14 @@ async function syncStocksToSheet() {
 async function syncSettingsToSheet() {
     const config = getAppsScriptConfig();
     if (!config) return;
+    // 새 기기는 localStorage가 비어 있음 — 빈 값을 보내면 시트의 키가 지워지므로
+    // 실제 값이 있는 키만 보내고, 보낼 게 없으면 호출 자체를 생략
+    const settings = {};
+    const openrouterKey = localStorage.getItem('pf_openrouter_key');
+    const twelvedataKey = localStorage.getItem('pf_twelvedata_key');
+    if (openrouterKey) settings.openrouter_key = openrouterKey;
+    if (twelvedataKey) settings.twelvedata_key = twelvedataKey;
+    if (Object.keys(settings).length === 0) return;
     try {
         await fetch(config.url, {
             method: 'POST',
@@ -264,10 +272,7 @@ async function syncSettingsToSheet() {
             body: JSON.stringify({
                 key: config.secret,
                 action: 'saveSettings',
-                settings: {
-                    openrouter_key: localStorage.getItem('pf_openrouter_key') || '',
-                    twelvedata_key: localStorage.getItem('pf_twelvedata_key') || ''
-                }
+                settings
             })
         });
     } catch (e) {
